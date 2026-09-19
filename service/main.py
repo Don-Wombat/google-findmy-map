@@ -27,7 +27,7 @@ import colors
 import export
 import locations
 import visits as visits_mod
-from augment import augment_device
+from augment import augment_device, RECENT_TRACK_LENGTH
 from geocode import Geocoder
 from store import LocationStore
 
@@ -100,6 +100,31 @@ def _augment_all(devices):
         )
         for d in devices
     ]
+
+
+def _refresh_device_track(device_id):
+    """Patch one device's cached recent-track fields in _state["devices"]
+    after a location-history mutation (delete-range / reset), without the
+    full _augment_all() re-augment update_device() uses.
+
+    augment_device() unconditionally re-persists a device's cached last
+    poll fix via store.add() (see augment.py) -- for update_device() that's
+    a harmless no-op re-insert of a still-present row, but here it would
+    immediately re-insert exactly the row(s) just deleted whenever the
+    deleted window reaches the device's most recently polled fix (always
+    true when resetting a live device's whole history). Patching only
+    history/last_location_time in place avoids that resurrection while
+    still refreshing the cached track before the next poll cycle. No-op
+    for a device not currently in _state["devices"] (the common case for a
+    stale device).
+    """
+    with _state_lock:
+        for d in _state["devices"]:
+            if d["id"] == device_id:
+                track = _store.recent(device_id, RECENT_TRACK_LENGTH)
+                d["history"] = track
+                d["last_location_time"] = track[-1]["time"] if track else d.get("time")
+                break
 
 
 def _maybe_prune_history():
@@ -437,6 +462,20 @@ def delete_device(device_id: str):
     return {"deleted": device_id, "points": removed}
 
 
+@app.delete("/api/devices/{device_id}/history", dependencies=[Depends(block_cross_site)])
+def reset_device_history(device_id: str):
+    """Delete a device's entire location history but keep its name/colour/
+    group overrides -- unlike DELETE /api/devices/{id}. Any device may be
+    targeted, live or stale: there is no 409-while-live restriction (unlike
+    delete_device()) since resetting a live device's history is meaningful
+    (it simply starts re-accumulating on the next poll), where deleting a
+    live device outright is not.
+    """
+    removed = _store.reset_device_history(device_id)
+    _refresh_device_track(device_id)
+    return {"device": device_id, "points": removed}
+
+
 @app.post("/api/devices/{device_id}/ring", dependencies=[Depends(block_cross_site)])
 def ring_device(device_id: str):
     """Make a device play its "find my device" sound."""
@@ -466,6 +505,22 @@ def get_history(device: str, start: int | None = None, end: int | None = None):
         "end": end,
         "points": _store.range(device, start, end),
     }
+
+
+@app.delete("/api/history", dependencies=[Depends(block_cross_site)])
+def delete_history_range(device: str, start: int, end: int):
+    """Permanently delete a device's location fixes in [start, end]
+    (inclusive) -- used to delete one visited place, since a visit is
+    computed fresh from raw points (visits.detect_visits()), never stored.
+    start/end are required (no defaulting to the whole account like
+    _export_window()) -- silently defaulting a destructive range delete
+    would be dangerous.
+    """
+    if end < start:
+        raise HTTPException(status_code=422, detail="end must not be before start")
+    removed = _store.delete_range(device, start, end)
+    _refresh_device_track(device)
+    return {"device": device, "start": start, "end": end, "points": removed}
 
 
 @app.get("/api/visits")
