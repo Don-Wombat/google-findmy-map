@@ -93,6 +93,11 @@ All other (optional) variables are documented in `.env.example`.
   the device id, never the name, and the confirm step shows the full id, so
   two devices you happened to rename to the same name stay distinguishable;
   a device that is still live cannot be deleted.
+- **Reset a device's history:** also on the settings page, a device picker
+  (every device, live or stale) lets you wipe just its location history —
+  unlike deleting the device, its name/colour/group overrides are kept.
+  There is no liveness restriction: resetting a live device's history
+  simply starts it fresh from the next poll.
 - **Ring a device:** the 🔔 button on each row makes it play its "find my
   device" sound; tap again (or wait ~30 s) to stop. The button shakes the
   instant the tap registers — there's a real multi-second FCM round-trip
@@ -118,7 +123,10 @@ All other (optional) variables are documented in `.env.example`.
   and it fills in over time. Long visit lists are capped with a "show
   more" button so the export controls below stay reachable. The device
   picker lists every device ever seen, not just ones in the current poll;
-  the chosen view mode + date are remembered per browser.
+  the chosen view mode + date are remembered per browser. Each visited
+  place can also be deleted — this hard-deletes the underlying raw points
+  for that stay (so it also shortens the track shown for that period) and
+  cannot be undone.
 - **Export:** the timeline offers **GPX / GeoJSON / CSV** downloads of the
   track and of the visited places for the chosen device and date range; the
   settings page has a per-device **full-history** export. For backup, or for
@@ -156,8 +164,12 @@ HTTPS** (see `SECURITY.md`).
   `GET /api/visits`, `GET /api/export/history` and `GET /api/export/visits`
   (`?format=gpx|geojson|csv`, optional `start`/`end`), `POST /api/refresh`,
   `PUT /api/devices/{id}`, `DELETE /api/devices/{id}` (stale devices only —
-  409 while live), `POST /api/devices/{id}/ring[/stop]`. The mutating
-  endpoints reject cross-site requests (Fetch Metadata).
+  409 while live), `DELETE /api/history` (deletes a device's location fixes
+  in a required `start`/`end` window — used to delete one visited place),
+  `DELETE /api/devices/{id}/history` (resets a device's history, keeping
+  its name/colour/group — no liveness restriction),
+  `POST /api/devices/{id}/ring[/stop]`. The mutating endpoints reject
+  cross-site requests (Fetch Metadata).
 - `service/export.py` — the GPX / GeoJSON / CSV formatters (stdlib only).
 - `service/store.py` — SQLite: full history (`add`/`recent`/`range` + a
   one-time `history.json` migration), device overrides (name / colour /
@@ -169,7 +181,8 @@ HTTPS** (see `SECURITY.md`).
   Nominatim, ≤ 1 request/1.1 s, negative cache + backoff),
   `service/auth.py` (the optional built-in login).
 - `web/index.html` (map), `web/timeline.html`, `web/settings.html`
-  (theme / language / login / data export / old-device deletion),
+  (theme / language / login / data export / device-history reset /
+  old-device deletion),
   `web/login.html`, `web/app.css`, `web/app.js`.
 
 ## Environment variables

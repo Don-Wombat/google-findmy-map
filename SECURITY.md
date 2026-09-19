@@ -52,9 +52,10 @@ set `GFM_HISTORY_RETENTION_DAYS` if you'd rather it aged out automatically.
 These do **not** replace the reverse-proxy authentication above.
 
 - **Cross-site request blocking.** `POST /api/refresh`,
-  `PUT /api/devices/{id}`, `DELETE /api/devices/{id}`,
-  `POST /api/devices/{id}/ring[/stop]`, `POST /api/auth/login` and
-  `PUT /api/settings/auth` reject requests whose `Sec-Fetch-Site` header is
+  `PUT /api/devices/{id}`, `DELETE /api/devices/{id}`, `DELETE /api/history`,
+  `DELETE /api/devices/{id}/history`, `POST /api/devices/{id}/ring[/stop]`,
+  `POST /api/auth/login` and `PUT /api/settings/auth` reject requests whose
+  `Sec-Fetch-Site` header is
   `cross-site`/`same-site` (Fetch Metadata). This stops a random web page
   the operator visits from triggering polls, edits, deletes, or ringing a
   device. Non-browser clients (curl, scripts) send no such header and are
@@ -65,6 +66,15 @@ These do **not** replace the reverse-proxy authentication above.
   independently addressable) and returns 409 while the device is still in
   the current poll, so its history can't be wiped by mistake and then
   silently re-accumulated.
+- **Location-history deletion is explicit-range-only, with no silent
+  default.** `DELETE /api/history` requires `start`/`end` in the query
+  string (422 if `end` is before `start`) rather than defaulting to "the
+  whole account" like the read/export endpoints' 0-to-now fallback — a
+  destructive range delete should never silently apply to more than the
+  caller asked for. `DELETE /api/devices/{id}/history` resets a device's
+  entire history but, unlike `DELETE /api/devices/{id}`, leaves its
+  `device_settings` row (name/colour/group) untouched and has no liveness
+  (409) restriction — it may target a device that is still being polled.
 - **Input validation.** Pin colours (from the API and from
   `GFM_DEVICE_COLORS`) must be a plain hex value or CSS colour keyword; SQL
   is fully parameterised; device names, error text and semantic-location
