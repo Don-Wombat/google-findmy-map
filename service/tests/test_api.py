@@ -338,6 +338,86 @@ class TestDeleteDevice:
         assert was_locked["value"] is True
 
 
+class TestDeleteHistoryRange:
+    def test_deletes_points_in_the_inclusive_range(self, client):
+        main = client._main
+        for t in (100, 200, 300, 400):
+            main._store.add("dev-1", {"latitude": 1, "longitude": 2, "time": t, "accuracy": 1})
+        r = client.request("DELETE", "/api/history?device=dev-1&start=200&end=300")
+        assert r.status_code == 200
+        assert r.json() == {"device": "dev-1", "start": 200, "end": 300, "points": 2}
+        assert [p["time"] for p in main._store.range("dev-1", 0, 1000)] == [100, 400]
+
+    def test_rejects_end_before_start_with_422(self, client):
+        r = client.request("DELETE", "/api/history?device=dev-1&start=300&end=200")
+        assert r.status_code == 422
+
+    def test_missing_start_or_end_is_422(self, client):
+        assert client.request("DELETE", "/api/history?device=dev-1&start=1").status_code == 422
+        assert client.request("DELETE", "/api/history?device=dev-1&end=1").status_code == 422
+
+    def test_deleting_an_unknown_device_range_is_a_noop_200(self, client):
+        r = client.request("DELETE", "/api/history?device=never-existed&start=0&end=100")
+        assert r.status_code == 200 and r.json()["points"] == 0
+
+    def test_delete_is_blocked_cross_site(self, client):
+        r = client.request("DELETE", "/api/history?device=dev-1&start=0&end=100",
+                           headers={"sec-fetch-site": "cross-site"})
+        assert r.status_code == 403
+
+    def test_does_not_touch_device_settings(self, client):
+        main = client._main
+        main._store.add("dev-1", {"latitude": 1, "longitude": 2, "time": 100, "accuracy": 1})
+        main._store.set_setting("dev-1", name="Kept")
+        client.request("DELETE", "/api/history?device=dev-1&start=0&end=1000")
+        assert main._store.get_settings()["dev-1"]["name"] == "Kept"
+
+    def test_does_not_resurrect_the_live_devices_latest_fix(self, client):
+        """Regression guard for the augment_device()/store.add() resurrection
+        bug: naively re-augmenting like update_device() does would undo the
+        delete for this one point."""
+        main = client._main
+        _seed_one_device(main, id="dev-1")   # caches+persists a fix at time=1000
+        r = client.request("DELETE", "/api/history?device=dev-1&start=1000&end=1000")
+        assert r.status_code == 200 and r.json()["points"] == 1
+        assert main._store.range("dev-1", 0, 9999) == []
+        assert _device(client, id="dev-1")["history"] == []
+
+
+class TestResetDeviceHistoryEndpoint:
+    def test_removes_history_but_keeps_settings(self, client):
+        main = client._main
+        _seed_one_device(main, id="dev-1", name="Phone")
+        main._store.set_setting("dev-1", name="Renamed", color="#112233", group="G")
+        r = client.request("DELETE", "/api/devices/dev-1/history")
+        assert r.status_code == 200 and r.json() == {"device": "dev-1", "points": 1}
+        assert main._store.range("dev-1", 0, 9999) == []
+        assert main._store.get_settings()["dev-1"] == {
+            "name": "Renamed", "color": "#112233", "group": "G",
+        }
+
+    def test_can_reset_a_live_device_no_409(self, client):
+        _seed_one_device(client._main, id="dev-live")
+        r = client.request("DELETE", "/api/devices/dev-live/history")
+        assert r.status_code == 200
+
+    def test_reset_of_a_live_device_does_not_resurrect_its_latest_fix(self, client):
+        main = client._main
+        _seed_one_device(main, id="dev-1")
+        client.request("DELETE", "/api/devices/dev-1/history")
+        assert main._store.range("dev-1", 0, 9999) == []
+        assert _device(client, id="dev-1")["history"] == []
+
+    def test_resetting_an_unknown_device_is_a_noop_200(self, client):
+        r = client.request("DELETE", "/api/devices/never-existed/history")
+        assert r.status_code == 200 and r.json()["points"] == 0
+
+    def test_reset_is_blocked_cross_site(self, client):
+        r = client.request("DELETE", "/api/devices/dev-1/history",
+                           headers={"sec-fetch-site": "cross-site"})
+        assert r.status_code == 403
+
+
 def test_semantic_location_does_not_clobber_the_device_name(client):
     """Regression test for the locations.py bug this feature fixed: merging
     a semantic-only fix into the device entry must not overwrite its name."""
