@@ -334,6 +334,54 @@ class TestDeleteDevice:
         assert store.get_settings() == {"dev": {"name": "Old", "color": None, "group": None}}
 
 
+class TestDeleteRange:
+    def test_deletes_only_points_within_the_inclusive_range(self, store):
+        for t in (100, 200, 300, 400):
+            store.add("dev", pt(time=t))
+        assert store.delete_range("dev", 200, 300) == 2
+        assert [p["time"] for p in store.range("dev", 0, 1000)] == [100, 400]
+
+    def test_only_touches_the_named_device(self, store):
+        store.add("a", pt(time=100))
+        store.add("b", pt(time=100))
+        store.delete_range("a", 0, 1000)
+        assert store.range("a", 0, 1000) == []
+        assert store.range("b", 0, 1000) != []
+
+    def test_leaves_device_settings_untouched(self, store):
+        store.add("dev", pt(time=100))
+        store.set_setting("dev", name="Kept")
+        store.delete_range("dev", 0, 1000)
+        assert store.get_settings() == {"dev": {"name": "Kept", "color": None, "group": None}}
+
+    def test_deleting_outside_the_stored_range_is_a_harmless_noop(self, store):
+        store.add("dev", pt(time=100))
+        assert store.delete_range("dev", 500, 600) == 0
+        assert store.range("dev", 0, 1000) != []
+
+
+class TestResetDeviceHistory:
+    def test_removes_all_history_but_keeps_settings(self, store):
+        for t in (100, 200, 300):
+            store.add("dev", pt(time=t))
+        store.set_setting("dev", name="Kept", color="#112233", group="G")
+        assert store.reset_device_history("dev") == 3
+        assert store.range("dev", 0, 1000) == []
+        assert store.get_settings() == {"dev": {"name": "Kept", "color": "#112233", "group": "G"}}
+
+    def test_only_touches_the_named_device(self, store):
+        store.add("a", pt(time=1))
+        store.add("b", pt(time=2))
+        store.reset_device_history("a")
+        assert store.range("a", 0, 1000) == []
+        assert store.range("b", 0, 1000) != []
+
+    def test_resetting_an_unknown_device_is_a_harmless_noop(self, store):
+        store.add("real", pt(time=1))
+        assert store.reset_device_history("ghost") == 0
+        assert store.range("real", 0, 1000) != []
+
+
 class TestGeocodeCache:
     def test_miss_returns_none(self, store):
         assert store.geocode_get(52.5, 13.4) is None
