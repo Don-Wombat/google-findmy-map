@@ -46,8 +46,8 @@ GHCR, no clone or local build needed:
 
 ```bash
 mkdir google-findmy-map && cd google-findmy-map
-curl -O https://raw.githubusercontent.com/EXxT4ZzY/google-findmy-map/main/docker-compose.yml
-curl -o .env https://raw.githubusercontent.com/EXxT4ZzY/google-findmy-map/main/.env.example
+curl -O https://raw.githubusercontent.com/Don-Wombat/google-findmy-map/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/Don-Wombat/google-findmy-map/main/.env.example
 # edit .env: GFM_SECRETS_FILE, GFM_DATA_DIR, PUID/PGID, PROXY_NETWORK
 docker compose up -d
 ```
