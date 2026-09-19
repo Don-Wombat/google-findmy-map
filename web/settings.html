@@ -79,6 +79,16 @@
     </section>
 
     <section class="settings-section">
+      <h2 data-i18n="s_reset_history">Reset device history</h2>
+      <div class="muted" data-i18n="reset_history_hint">Delete a device's location history while keeping its name, colour and group. This cannot be undone.</div>
+      <div class="field">
+        <label for="reset-device" data-i18n="f_device">Device</label>
+        <select id="reset-device"></select>
+      </div>
+      <div id="reset-history-box"></div>
+    </section>
+
+    <section class="settings-section">
       <h2 data-i18n="s_devices">Old devices</h2>
       <div class="muted" data-i18n="dev_stale_hint">Devices that no longer appear on the map. Deleting one removes its whole history and settings — it cannot be undone.</div>
       <div id="stale-devices"></div>
@@ -206,6 +216,59 @@
   }
   exportSel.addEventListener('change', updateExportLinks);
 
+  // ---- reset a device's history ------------------------------------------
+  const resetSel = document.getElementById('reset-device');
+  const resetBox = document.getElementById('reset-history-box');
+  let knownDevices = [];
+
+  function renderResetControl() {
+    resetBox.innerHTML = '';
+    const id = resetSel.value;
+    if (!id) return;
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn btn-small btn-danger';
+    btn.textContent = t('reset_history_button');
+    btn.addEventListener('click', () => renderResetConfirm(id));
+    resetBox.appendChild(btn);
+  }
+
+  function renderResetConfirm(id) {
+    const d = knownDevices.find(x => x.id === id) || { id, name: id, point_count: 0 };
+    resetBox.innerHTML = '';
+    const q = document.createElement('div');
+    q.className = 'stale-confirm';
+    q.textContent = t('reset_confirm_q', { name: d.name || d.id, n: nf.format(d.point_count || 0) });
+    const actions = document.createElement('div');
+    actions.className = 'stale-actions';
+    const go = document.createElement('button');
+    go.type = 'button'; go.className = 'btn btn-small btn-danger';
+    go.textContent = t('reset_confirm_go');
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'btn btn-small';
+    cancel.textContent = t('cancel');
+    cancel.addEventListener('click', renderResetControl);
+    go.addEventListener('click', async () => {
+      go.disabled = cancel.disabled = true;
+      let res;
+      try {
+        res = await fetch('/api/devices/' + encodeURIComponent(id) + '/history', { method: 'DELETE' });
+      } catch (e) {
+        go.disabled = cancel.disabled = false;
+        go.textContent = t('login_error');
+        return;
+      }
+      if (!res.ok) {
+        go.disabled = cancel.disabled = false;
+        go.textContent = t('login_error');
+        return;
+      }
+      await loadDevices();   // refreshes point counts everywhere (export list, stale list, this control)
+    });
+    actions.append(go, cancel);
+    resetBox.append(q, actions);
+  }
+  resetSel.addEventListener('change', renderResetControl);
+
   // ---- device list + delete of stale devices ---------------------------
   const staleBox = document.getElementById('stale-devices');
   const nf = new Intl.NumberFormat(FMM.locale());
@@ -229,6 +292,16 @@
       exportSel.appendChild(o);
     }
     updateExportLinks();
+
+    // reset-history select: every device, same population as the export list
+    knownDevices = devices;
+    resetSel.innerHTML = '';
+    for (const d of devices) {
+      const o = document.createElement('option');
+      o.value = d.id; o.textContent = d.name || d.id;
+      resetSel.appendChild(o);
+    }
+    renderResetControl();
 
     // stale list: only devices no longer in the live poll
     const stale = devices.filter(d => !d.live);
