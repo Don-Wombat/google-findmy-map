@@ -262,6 +262,13 @@ html.has-poll-alert #app {
 .visit-place { font-size: 13px; font-weight: 600; }
 .visit-place.pending { color: var(--muted); font-weight: 400; font-style: italic; }
 .visit-when { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.visit-del { flex-shrink: 0; align-self: center; opacity: 0.7; }
+.visit-del:hover { opacity: 1; }
+.visit.confirming { flex-wrap: wrap; cursor: default; }
+.visit.confirming:hover { background: none; }
+.visit-confirm { flex: 1 1 100%; font-size: 12px; line-height: 1.5; }
+.visit-actions { display: flex; gap: 6px; flex: 1 1 100%; margin-top: 6px; }
+.visit-actions .btn { flex: 1; margin-top: 0; }
 
 /* Numbered stop markers on the map */
 .visit-marker { background: none; border: none; }

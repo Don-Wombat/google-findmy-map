@@ -76,6 +76,10 @@
         + 'Once more location data has accumulated, visited places will appear here.',
       unit_min: 'min',
       unit_hour: 'h',
+      visit_delete: 'Delete this visit',
+      visit_confirm_q: 'Permanently delete the visit to "{place}" ({when}, {n} points)? '
+        + 'This also shortens the track for that period — this cannot be undone.',
+      visit_confirm_go: 'Delete',
       s_export: 'Data export',
       export_track: 'Track',
       export_visits: 'Visited places',
@@ -190,6 +194,10 @@
         + 'Sobald sich mehr Standortdaten angesammelt haben, erscheinen hier die besuchten Orte.',
       unit_min: 'Min',
       unit_hour: 'Std',
+      visit_delete: 'Diesen Besuch löschen',
+      visit_confirm_q: 'Den Besuch bei „{place}" ({when}, {n} Punkte) endgültig löschen? '
+        + 'Dadurch wird auch der Track für diesen Zeitraum verkürzt — das lässt sich nicht rückgängig machen.',
+      visit_confirm_go: 'Löschen',
       s_export: 'Datenexport',
       export_track: 'Track',
       export_visits: 'Besuchte Orte',

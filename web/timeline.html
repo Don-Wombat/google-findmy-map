@@ -332,6 +332,67 @@ async function loadVisits(id, start, end, run, attempt) {
   }
 }
 
+function visitRow(v, n, when, place, pending, marker, data) {
+  const row = document.createElement('div');
+  row.className = 'visit';
+  row.innerHTML = `
+    <span class="visit-num">${n}</span>
+    <span class="visit-body">
+      <span class="visit-place${pending ? ' pending' : ''}">${
+        pending ? t('resolving_address') : escapeHtml(place)}</span>
+      <span class="visit-when">${when} · ${fmtDuration(v.end - v.start)}</span>
+    </span>
+    <button type="button" class="icon-btn visit-del" data-i18n-aria="visit_delete" aria-label="Delete this visit">🗑</button>`;
+  row.addEventListener('click', () => {
+    map.flyTo([v.lat, v.lon], Math.max(map.getZoom(), 16));
+    marker.openPopup();
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      document.getElementById('sidebar').classList.add('collapsed');
+    }
+  });
+
+  row.querySelector('.visit-del').addEventListener('click', (e) => {
+    e.stopPropagation();   // don't also trigger the row's flyTo/openPopup
+    const id = document.getElementById('device').value;
+    row.classList.add('confirming');
+    row.innerHTML = '';
+    const q = document.createElement('div');
+    q.className = 'visit-confirm';
+    q.textContent = t('visit_confirm_q', { place, when, n: v.point_count });
+    const go = document.createElement('button');
+    go.type = 'button'; go.className = 'btn btn-small btn-danger';
+    go.textContent = t('visit_confirm_go');
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'btn btn-small';
+    cancel.textContent = t('cancel');
+    cancel.addEventListener('click', () => renderVisits(data));
+    go.addEventListener('click', async () => {
+      go.disabled = cancel.disabled = true;
+      let res;
+      try {
+        res = await fetch(`/api/history?${new URLSearchParams({ device: id, start: v.start, end: v.end })}`,
+          { method: 'DELETE' });
+      } catch (err) {
+        go.disabled = cancel.disabled = false;
+        go.textContent = t('login_error');
+        return;
+      }
+      if (!res.ok) {
+        go.disabled = cancel.disabled = false;
+        go.textContent = t('login_error');
+        return;
+      }
+      show();   // redraws both the track and the visits list
+    });
+    const actions = document.createElement('div');
+    actions.className = 'visit-actions';
+    actions.append(go, cancel);
+    row.append(q, actions);
+  });
+
+  return row;
+}
+
 function renderVisits(data) {
   visitLayer.clearLayers();
   const box = document.getElementById('visits');
@@ -375,23 +436,7 @@ function renderVisits(data) {
 
     if (i >= shown) return;
 
-    const row = document.createElement('div');
-    row.className = 'visit';
-    row.innerHTML = `
-      <span class="visit-num">${n}</span>
-      <span class="visit-body">
-        <span class="visit-place${pending ? ' pending' : ''}">${
-          pending ? t('resolving_address') : escapeHtml(place)}</span>
-        <span class="visit-when">${when} · ${fmtDuration(v.end - v.start)}</span>
-      </span>`;
-    row.addEventListener('click', () => {
-      map.flyTo([v.lat, v.lon], Math.max(map.getZoom(), 16));
-      marker.openPopup();
-      if (window.matchMedia('(max-width: 640px)').matches) {
-        document.getElementById('sidebar').classList.add('collapsed');
-      }
-    });
-    list.appendChild(row);
+    list.appendChild(visitRow(v, n, when, place, pending, marker, data));
   });
 
   if (visits.length > shown) {
