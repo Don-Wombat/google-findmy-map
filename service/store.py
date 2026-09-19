@@ -169,6 +169,43 @@ class LocationStore:
                 log.warning("Could not delete device %r: %s", device_id, exc)
                 return 0
 
+    def delete_range(self, device_id, start_ts, end_ts):
+        """Delete a device's location fixes with start_ts <= ts <= end_ts
+        (inclusive, matching range()'s window). Used to delete a detected
+        visit, which is never a stored row itself -- see
+        visits.detect_visits(). Returns the number of fixes removed. A
+        single statement, unlike delete_device(), so no rollback pairing
+        is needed.
+        """
+        with self._lock:
+            try:
+                cur = self._conn.execute(
+                    "DELETE FROM locations WHERE device_id = ? AND ts >= ? AND ts <= ?",
+                    (device_id, int(start_ts), int(end_ts)),
+                )
+                self._conn.commit()
+                return cur.rowcount
+            except sqlite3.Error as exc:
+                log.warning("Could not delete location range for %r: %s", device_id, exc)
+                return 0
+
+    def reset_device_history(self, device_id):
+        """Delete every location fix for a device, keeping its
+        device_settings row (name / colour / group overrides) untouched --
+        the key difference from delete_device(), which wipes both. Returns
+        the number of fixes removed.
+        """
+        with self._lock:
+            try:
+                cur = self._conn.execute(
+                    "DELETE FROM locations WHERE device_id = ?", (device_id,)
+                )
+                self._conn.commit()
+                return cur.rowcount
+            except sqlite3.Error as exc:
+                log.warning("Could not reset history for device %r: %s", device_id, exc)
+                return 0
+
     def set_setting(self, device_id, name=None, color=None, group=None):
         """Upsert a device's display-name / pin-colour / group override.
 
