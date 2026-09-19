@@ -1145,3 +1145,25 @@ def test_real_timeline_has_day_week_month_range_and_visits_paging():
     assert "VISITS_PAGE" in timeline and "visitsExpanded" in timeline
     app_js = (web_dir / "app.js").read_text()
     assert "range_month:" in app_js and "visits_show_more:" in app_js
+
+
+def test_real_timeline_has_a_visit_delete_affordance():
+    web_dir = pathlib.Path(__file__).parents[2] / "web"
+    timeline = (web_dir / "timeline.html").read_text()
+    assert "visit-del" in timeline
+    assert "method: 'DELETE'" in timeline and "/api/history" in timeline
+    assert "visit_confirm_q" in timeline
+    assert "alert(" not in timeline and "confirm(" not in timeline
+    app_js = (web_dir / "app.js").read_text()
+    assert "visit_delete:" in app_js and "Diesen Besuch löschen" in app_js
+
+
+def test_real_settings_has_a_reset_history_control():
+    web_dir = pathlib.Path(__file__).parents[2] / "web"
+    settings = (web_dir / "settings.html").read_text()
+    assert 'id="reset-device"' in settings and 'id="reset-history-box"' in settings
+    assert "/history', { method: 'DELETE' }" in settings
+    assert "reset_confirm_q" in settings
+    assert "alert(" not in settings and "confirm(" not in settings
+    app_js = (web_dir / "app.js").read_text()
+    assert "s_reset_history:" in app_js and "Verlauf eines Geräts zurücksetzen" in app_js
