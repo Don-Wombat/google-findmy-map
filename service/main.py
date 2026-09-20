@@ -210,7 +210,7 @@ app = FastAPI(lifespan=lifespan)
 SESSION_COOKIE = "fmm_session"
 PASSWORD_MIN_LENGTH = 8
 PUBLIC_PATHS = {
-    "/login.html", "/app.css", "/app.js", "/favicon.ico", "/favicon.svg",
+    "/login.html", "/app.css", "/app.js", "/favicon.png",
     "/api/auth/login", "/api/auth/status", "/api/auth/logout",
     "/api/health",
 }

@@ -28,8 +28,7 @@ def _build_client(tmp_path, monkeypatch, env=None):
         ("settings.html", "<html>settings</html>"),
         ("app.js", "// app"),
         ("app.css", "/* css */"),
-        ("favicon.svg", "<svg></svg>"),
-        ("favicon.ico", "fake-ico"),
+        ("favicon.png", "fake-png"),
     ):
         (tmp_path / name).write_text(content)
     for key, value in (env or {}).items():
@@ -811,11 +810,10 @@ class TestAuthGate:
         assert client.get("/login.html").status_code == 200
         assert client.get("/app.js").status_code == 200
         assert client.get("/api/auth/status").status_code == 200
-        # The login page itself references these; they must not redirect to
-        # login.html while locked out, or the tab icon (and any browser's
-        # automatic /favicon.ico probe) silently breaks behind the gate.
-        assert client.get("/favicon.svg").status_code == 200
-        assert client.get("/favicon.ico").status_code == 200
+        # The login page itself references this; it must not redirect to
+        # login.html while locked out, or the tab icon silently breaks
+        # behind the gate.
+        assert client.get("/favicon.png").status_code == 200
 
     def test_auth_disable_allows_resetting_a_forgotten_password(self, make_client):
         """The documented recovery flow (README / SECURITY.md), end to end."""
@@ -1059,14 +1057,15 @@ def test_real_timeline_header_has_gear_and_no_toggles():
 
 def test_real_favicon_files_exist_and_are_referenced():
     web_dir = pathlib.Path(__file__).parents[2] / "web"
-    svg = (web_dir / "favicon.svg").read_text()
-    assert "<svg" in svg
-    ico = (web_dir / "favicon.ico").read_bytes()
-    assert ico[:4] == b"\x00\x00\x01\x00"   # ICO magic
+    png = (web_dir / "favicon.png").read_bytes()
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"   # PNG magic
+    assert not (web_dir / "favicon.svg").exists()   # PNG-only, see git history
+    assert not (web_dir / "favicon.ico").exists()   # PNG-only, see git history
     for page in ("index.html", "timeline.html", "login.html", "settings.html"):
         html = (web_dir / page).read_text()
-        assert 'href="favicon.svg"' in html
-        assert 'href="favicon.ico"' in html
+        assert 'href="favicon.png"' in html
+        assert "favicon.svg" not in html
+        assert "favicon.ico" not in html
 
 
 def test_real_index_has_a_ring_button_wired_to_the_api():
