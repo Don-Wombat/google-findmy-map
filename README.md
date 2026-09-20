@@ -101,12 +101,24 @@ docker compose logs setup-wizard   # prints a one-time URL with ?token=...
 
 Open that URL (via whatever reverse-proxy host you've pointed at the
 `setup-wizard` service -- it has no published port, same as `findmy-map`
-itself), click Start, and complete the Google sign-in inside the embedded
-browser. **Two sign-in prompts may appear in a row** -- the wizard drives two
-separate steps of the vendored login flow, and the second one is usually (but
-not always) an instant, cookie-based continuation of the first rather than a
-fresh prompt. Once it reports success, `secrets.json` is ready and
-`findmy-map` will pick it up on its next poll.
+itself). The page offers two parallel ways to get a working `secrets.json`:
+
+- **Start browser login** -- complete the Google sign-in yourself inside the
+  embedded browser. **Two sign-in prompts may appear in a row** -- the
+  wizard drives two separate steps of the vendored login flow, and the
+  second one is usually (but not always) an instant, cookie-based
+  continuation of the first rather than a fresh prompt.
+- **Upload an existing `secrets.json`** -- already have one from somewhere
+  else (a GoogleFindMyTools instance you don't want to live-mount, a backup,
+  a file copied from another machine)? Pick it in the file field and click
+  "Upload & verify" instead -- no browser needed. It's checked the exact
+  same way a fresh login is: if the file already has working tokens, the
+  wizard confirms that against the real API immediately; if it's only
+  partially complete, the missing pieces are fetched the normal way
+  (falling back to the embedded browser for whatever's still missing).
+
+Either way, once it reports success `secrets.json` is ready and `findmy-map`
+will pick it up on its next poll.
 
 ```bash
 docker compose --profile setup-wizard down   # stop it once you're done

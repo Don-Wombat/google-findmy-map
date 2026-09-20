@@ -172,6 +172,18 @@ Chromium and streamed to you over noVNC. Treat it accordingly:
   chromedriver build from a CDN on first use even though `chromium-driver`
   is already installed at build time. Don't run this service somewhere with
   restricted egress without accounting for that.
+- **Uploading an existing `secrets.json`** (`POST /api/upload`, gated the
+  same as everything else here) validates only that the upload is
+  well-formed JSON, is a JSON object, and is under a size ceiling (256 KB —
+  a real `secrets.json` is a few KB) before writing it — it does **not**
+  otherwise inspect the uploaded content. Trust in what it actually
+  contains comes from the same place trust in a fresh login does: the
+  ensuing verification step (a real `list_devices()` call against Google's
+  API) either succeeds or reports a clear failure, never a silent
+  false-positive. The single-run lock is acquired *before* the file is
+  written, so an upload can never race a login already in progress for the
+  same `secrets.json`. An upload **overwrites** the file outright — back it
+  up yourself first if you want to keep whatever was there.
 
 ## Supply chain
 
