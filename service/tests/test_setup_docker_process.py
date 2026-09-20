@@ -153,6 +153,27 @@ def test_setup_wizard_gate_and_processes():
         ).strip()
         assert authed_status == "200"
 
+        # A real multipart POST through the actual nginx+uvicorn stack,
+        # not just FastAPI's TestClient (which parses multipart bodies
+        # itself, so doesn't prove python-multipart is actually installed
+        # and wired up in the real image). Deliberately invalid JSON, not
+        # a full login attempt: a real run makes real network calls to
+        # Google and is far too slow/flaky for a CI-run test -- the
+        # gate/timeout/state-machine mechanics around it are already
+        # covered by test_setup_wizard_logic.py with a fake subprocess.
+        subprocess.run(
+            ["docker", "exec", container_id, "sh", "-c",
+             "echo 'not json' > /tmp/bad-upload.json"],
+            capture_output=True, timeout=10, check=True,
+        )
+        upload_status = _exec_curl(
+            container_id, "-o", "/dev/null", "-w", "%{http_code}",
+            "--cookie", f"wiz_session={cookie}",
+            "-F", "file=@/tmp/bad-upload.json;type=application/json",
+            "http://127.0.0.1:8090/api/upload",
+        ).strip()
+        assert upload_status == "400", f"expected the upload endpoint to reject invalid JSON, got {upload_status!r}"
+
         vnc_unauthed = _status_code(container_id, "/vnc/")
         assert vnc_unauthed == "401", f"/vnc/ should be gated the same way, got {vnc_unauthed!r}"
 

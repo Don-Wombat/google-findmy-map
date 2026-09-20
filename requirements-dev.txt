@@ -5,3 +5,4 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 httpx>=0.28.0
 pytest>=8.0
+python-multipart>=0.0.17  # test_setup_wizard_logic.py exercises POST /api/upload

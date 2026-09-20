@@ -214,6 +214,99 @@ def test_crash_without_final_line_does_not_stay_running_forever(monkeypatch, tmp
         client.__exit__(None, None, None)
 
 
+# --- uploading an existing secrets.json, parallel to the browser login ---
+
+def test_upload_requires_auth(monkeypatch, tmp_path):
+    client, _ = _import_wizard_main(monkeypatch, token="t")
+    with client:
+        resp = client.post("/api/upload", files={"file": ("secrets.json", b"{}", "application/json")})
+        assert resp.status_code == 401
+
+
+def test_upload_rejects_invalid_json(monkeypatch, tmp_path):
+    client, wizard_main = _authed_client(monkeypatch, token="t")
+    try:
+        monkeypatch.setattr(wizard_main, "SECRETS_PATH", tmp_path / "secrets.json")
+        resp = client.post("/api/upload",
+                            files={"file": ("secrets.json", b"not json", "application/json")})
+        assert resp.status_code == 400
+        assert not (tmp_path / "secrets.json").exists()
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_upload_rejects_non_object_json(monkeypatch, tmp_path):
+    client, wizard_main = _authed_client(monkeypatch, token="t")
+    try:
+        monkeypatch.setattr(wizard_main, "SECRETS_PATH", tmp_path / "secrets.json")
+        resp = client.post("/api/upload",
+                            files={"file": ("secrets.json", b"[1, 2, 3]", "application/json")})
+        assert resp.status_code == 400
+        assert not (tmp_path / "secrets.json").exists()
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_upload_rejects_oversized_file(monkeypatch, tmp_path):
+    client, wizard_main = _authed_client(monkeypatch, token="t")
+    try:
+        monkeypatch.setattr(wizard_main, "SECRETS_PATH", tmp_path / "secrets.json")
+        monkeypatch.setattr(wizard_main, "_MAX_UPLOAD_BYTES", 10)
+        big = json.dumps({"aas_token": "x" * 100}).encode()
+        resp = client.post("/api/upload",
+                            files={"file": ("secrets.json", big, "application/json")})
+        assert resp.status_code == 413
+        assert not (tmp_path / "secrets.json").exists()
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_upload_writes_file_and_triggers_verify(monkeypatch, tmp_path):
+    client, wizard_main = _authed_client(monkeypatch, token="t")
+    try:
+        secrets_path = tmp_path / "secrets.json"
+        monkeypatch.setattr(wizard_main, "SECRETS_PATH", secrets_path)
+        fake = _write_fake_flow(tmp_path, [
+            {"ts": 0, "stage": "verify", "msg": "..."},
+            {"stage": "done", "ok": True},
+        ], name="fake_upload_flow.py")
+        monkeypatch.setattr(wizard_main, "RUN_FLOW_SCRIPT", fake)
+
+        uploaded = {"aas_token": "already-have-this", "username": "me@example.com"}
+        resp = client.post("/api/upload", files={
+            "file": ("secrets.json", json.dumps(uploaded).encode(), "application/json"),
+        })
+        assert resp.status_code == 200
+        assert json.loads(secrets_path.read_text()) == uploaded
+
+        _wait_until(lambda: client.get("/api/status").json()["phase"] != "running")
+        assert client.get("/api/status").json()["phase"] == "success"
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_upload_rejected_while_a_run_is_in_progress(monkeypatch, tmp_path):
+    client, wizard_main = _authed_client(monkeypatch, token="t")
+    try:
+        secrets_path = tmp_path / "secrets.json"
+        monkeypatch.setattr(wizard_main, "SECRETS_PATH", secrets_path)
+        slow = _write_fake_flow(tmp_path, [], sleep_seconds=5, name="slow_flow.py")
+        monkeypatch.setattr(wizard_main, "RUN_FLOW_SCRIPT", slow)
+
+        first = client.post("/api/start")
+        assert first.status_code == 200
+
+        resp = client.post("/api/upload", files={
+            "file": ("secrets.json", b'{"aas_token": "x"}', "application/json"),
+        })
+        assert resp.status_code == 409
+        # The upload must not have written anything -- the running,
+        # browser-driven flow owns the file until it finishes.
+        assert not secrets_path.exists()
+    finally:
+        client.__exit__(None, None, None)
+
+
 # --- run_flow.py's own stage sequencing, vendor chain stubbed ------------
 
 def _stub_module(monkeypatch, dotted_name, **attrs):
