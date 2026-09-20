@@ -63,6 +63,12 @@
       <button type="button" id="logout-btn" class="btn" data-i18n="log_out" hidden>Log out</button>
     </section>
 
+    <section class="settings-section" id="setup-wizard-section" hidden>
+      <h2 data-i18n="s_setup_wizard">Setup Wizard</h2>
+      <div class="muted" data-i18n="setup_wizard_hint">Generate secrets.json by logging into Google in an embedded browser, instead of running a separate GoogleFindMyTools instance.</div>
+      <a id="setup-wizard-link" class="btn btn-primary" target="_blank" rel="noopener" data-i18n="open_setup_wizard">Open Setup Wizard</a>
+    </section>
+
     <section class="settings-section">
       <h2 data-i18n="s_export">Data export</h2>
       <div class="field">
@@ -397,6 +403,15 @@
   }
 
   loadDevices();
+
+  (async function loadSetupWizardLink() {
+    let cfg;
+    try { cfg = await (await fetch('/api/config')).json(); }
+    catch (e) { return; }
+    if (!cfg.setup_wizard_url) return;
+    document.getElementById('setup-wizard-link').href = cfg.setup_wizard_url;
+    document.getElementById('setup-wizard-section').hidden = false;
+  })();
 
   FMM.onLangChange = () => { renderLang(); renderAuth(); loadDevices(); };
   load();

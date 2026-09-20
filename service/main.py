@@ -212,7 +212,7 @@ PASSWORD_MIN_LENGTH = 8
 PUBLIC_PATHS = {
     "/login.html", "/app.css", "/app.js", "/favicon.png",
     "/api/auth/login", "/api/auth/status", "/api/auth/logout",
-    "/api/health",
+    "/api/health", "/api/config",
 }
 
 
@@ -619,6 +619,14 @@ def export_visits(device: str, format: str = "gpx",
     return _export_response(formatter(found), media_type, "visits", ext,
                             device, lo, hi,
                             has_range=(start is not None or end is not None))
+
+
+@app.get("/api/config")
+def public_config():
+    """Static, non-sensitive config the frontend needs before knowing
+    whether it's authenticated -- kept separate from /api/auth/status,
+    which is about auth state, not general config."""
+    return {"setup_wizard_url": os.environ.get("GFM_SETUP_WIZARD_URL") or None}
 
 
 @app.get("/api/auth/status")

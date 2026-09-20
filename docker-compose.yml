@@ -32,6 +32,10 @@ services:
       - GFM_DEVICE_COLORS=${GFM_DEVICE_COLORS:-}
       - GFM_AUTH_DISABLE=${GFM_AUTH_DISABLE:-}
       - GFM_LOGIN_DELAY_MS=${GFM_LOGIN_DELAY_MS:-500}
+      # Only shows a "Setup Wizard" link on the settings page when set --
+      # point it at wherever the setup-wizard service below is actually
+      # reachable from your browser (its own NPM proxy host, typically).
+      - GFM_SETUP_WIZARD_URL=${GFM_SETUP_WIZARD_URL:-}
       # The container starts as root and entrypoint.sh chowns /data to
       # PUID:PGID before dropping privileges (see entrypoint.sh). PUID/PGID
       # must also match the owner of GFM_SECRETS_FILE, or the token file
@@ -51,6 +55,40 @@ services:
       - ${GFM_SECRETS_FILE}:/app/vendor/Auth/secrets.json:rw
     # No "ports:" on purpose -- reachable only from the reverse proxy on
     # proxy-net, at container port 8080 (see README).
+
+  # ---------------------------------------------------------------------
+  # Opt-in: generates secrets.json via an embedded, remote-controlled
+  # browser instead of requiring a separately-run GoogleFindMyTools
+  # instance. NOT started by plain `docker compose up` -- see README
+  # "Generating secrets.json with the setup wizard" for the exact
+  # `--profile setup-wizard` invocation. This is a real, non-headless
+  # Chromium with live Google network egress; do not leave it running
+  # longer than an actual setup session (see SECURITY.md).
+  setup-wizard:
+    build:
+      context: ./setup
+      args:
+        GFM_UPSTREAM_REF: ${GFM_UPSTREAM_REF:-d46e952}
+    container_name: findmy-map-setup-wizard
+    profiles: ["setup-wizard"]
+    # Deliberately "no", not unless-stopped: a one-time setup token becomes
+    # useless after it's redeemed once, and this container must not
+    # silently reappear on a host reboot or a plain `up -d` of the rest of
+    # the stack.
+    restart: "no"
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - GFM_SETUP_TOKEN_TTL=${GFM_SETUP_TOKEN_TTL:-900}
+      - GFM_SETUP_RUN_TIMEOUT_SECONDS=${GFM_SETUP_RUN_TIMEOUT_SECONDS:-900}
+    volumes:
+      # The SAME file as findmy-map's GFM_SECRETS_FILE above -- not a copy.
+      # PUID/PGID must match its owner exactly like the main service does.
+      - ${GFM_SECRETS_FILE}:/app/vendor/Auth/secrets.json:rw
+    networks:
+      - proxy-net
+    # No "ports:" here either, for the same reason as findmy-map: reachable
+    # only via a reverse-proxy host you add for it on demand (see README).
 
 networks:
   proxy-net:

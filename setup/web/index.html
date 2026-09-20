@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>findmy-map -- Setup Wizard</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main class="wizard">
+    <h1>Setup Wizard</h1>
+    <p class="hint">
+      This generates <code>secrets.json</code> by logging into your Google
+      account inside the embedded browser below. Two sign-in prompts may
+      appear in a row -- that's expected (see README). Nothing you type here
+      is seen by this app itself; it happens directly inside Google's own
+      pages, rendered in the browser view below.
+    </p>
+
+    <section class="status-bar">
+      <button id="start-btn" type="button">Start</button>
+      <span id="phase" class="phase phase-idle">idle</span>
+    </section>
+
+    <pre id="log" class="log" aria-live="polite"></pre>
+
+    <section class="browser-frame">
+      <iframe id="vnc-frame" src="/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true"
+              title="Embedded browser -- complete the Google login here"></iframe>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

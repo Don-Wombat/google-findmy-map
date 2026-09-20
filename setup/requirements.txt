@@ -1,0 +1,18 @@
+# Own control app
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+
+# Drives the vendored GoogleFindMyTools Auth/ chain directly (see
+# run_flow.py) -- unlike the main service, this container actually launches
+# a browser, so these are load-bearing here, not just transitively pulled in.
+undetected-chromedriver>=3.5.5
+selenium>=4.27.1
+gpsoauth>=1.1.1
+requests>=2.32.3
+beautifulsoup4>=4.12.3
+pyscrypt>=1.6.2
+cryptography>=43.0.3
+pycryptodomex>=3.21.0
+ecdsa>=0.19.0
+pytz>=2024.2
+protobuf>=5.28.3
