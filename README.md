@@ -61,7 +61,7 @@ Key `.env` values:
 |---|---|
 | `GFM_SECRETS_FILE` | Host path to the **single** `secrets.json` of the existing GoogleFindMyTools container. Bind-mounted read-write so token refreshes stay in sync between both containers. Do **not** mount the whole `Auth/` folder — only this one file. |
 | `GFM_DATA_DIR` | Host directory for this service's SQLite database (`history.db`). Holds raw location data — treat it as personal data. |
-| `PUID` / `PGID` | Owner of the two paths above (and the UID the container runs as). Check with `stat -c '%u:%g' "$GFM_SECRETS_FILE"`. An init step chowns `GFM_DATA_DIR` to match. |
+| `PUID` / `PGID` | Owner of the two paths above, and the UID/GID the app process runs as. The container starts as root just long enough for its entrypoint to chown `GFM_DATA_DIR` to match, then drops to this user before running the app. Check with `stat -c '%u:%g' "$GFM_SECRETS_FILE"`. |
 | `PROXY_NETWORK` | Name of the external Docker network your reverse proxy is on. |
 
 All other (optional) variables are documented in `.env.example`.
@@ -152,8 +152,10 @@ HTTPS** (see `SECURITY.md`).
   `ARG GFM_UPSTREAM_REF`) into `/app/vendor`.
 - `docker-compose.yml` mounts only the single `secrets.json` into the vendored
   `Auth` folder — login data / token refresh shared rather than duplicated,
-  without overwriting the rest of the vendored auth code. A `findmy-map-init`
-  step (Alpine, root) chowns the data volume to `PUID:PGID` and exits.
+  without overwriting the rest of the vendored auth code. The container
+  starts as root; `entrypoint.sh` chowns the data volume to `PUID:PGID`,
+  then execs the app via `gosu` as that user, so the long-running process
+  is never root.
 - `service/locations.py` uses the library functions but returns structured
   data instead of only printing it.
 - `service/main.py` — FastAPI + a background poll thread. Endpoints:

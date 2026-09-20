@@ -94,8 +94,15 @@ These do **not** replace the reverse-proxy authentication above.
   negatively caches failed lookups, and backs off exponentially on
   repeated failures — so an outage can't turn into a request flood that
   gets your IP blocked by the public OSM Nominatim.
-- **Non-root container.** The service runs as an unprivileged UID
-  (`${PUID}:${PGID}`).
+- **Non-root container.** The app process runs as an unprivileged UID
+  (`${PUID}:${PGID}`), never as root. The container itself starts as root
+  very briefly: `entrypoint.sh` (baked into the image) chowns the `/data`
+  volume to `PUID:PGID`, then immediately execs the app under `gosu`
+  (the same minimal privilege-drop tool used by the official `postgres`/
+  `redis` images) as that UID/GID and never returns to root. That root
+  window does a single `chown` and nothing else -- no network listener is
+  open yet -- before the unprivileged app process replaces it as the
+  container's main process.
 - **Password storage.** The password is stored as a stdlib `scrypt` hash
   (`n=2^14, r=8, p=1`), never in clear; verification is constant-time.
 - **Session tokens.** The session cookie is an HMAC-SHA256-signed token
