@@ -26,7 +26,8 @@ body {
   gap: 1rem;
 }
 
-#start-btn {
+#start-btn,
+#upload-btn {
   padding: 0.5rem 1.25rem;
   font-size: 1rem;
   border: none;
@@ -36,9 +37,28 @@ body {
   cursor: pointer;
 }
 
-#start-btn:disabled {
+#start-btn:disabled,
+#upload-btn:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.upload-section {
+  border: 1px solid #2a2f38;
+  border-radius: 6px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.upload-section h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.upload-section input[type="file"] {
+  color: inherit;
 }
 
 .phase {

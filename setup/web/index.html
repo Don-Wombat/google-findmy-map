@@ -18,11 +18,22 @@
     </p>
 
     <section class="status-bar">
-      <button id="start-btn" type="button">Start</button>
+      <button id="start-btn" type="button">Start browser login</button>
       <span id="phase" class="phase phase-idle">idle</span>
     </section>
 
     <pre id="log" class="log" aria-live="polite"></pre>
+
+    <section class="upload-section">
+      <h2>Already have a secrets.json?</h2>
+      <p class="hint">
+        Upload it directly instead -- e.g. one already produced by a
+        GoogleFindMyTools instance elsewhere. It's verified the same way a
+        fresh login is (no browser needed if it already works).
+      </p>
+      <input type="file" id="upload-file" accept="application/json,.json">
+      <button id="upload-btn" type="button">Upload &amp; verify</button>
+    </section>
 
     <section class="browser-frame">
       <iframe id="vnc-frame" src="/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true"

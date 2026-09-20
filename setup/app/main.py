@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -24,6 +24,13 @@ import state
 APP_DIR = Path(__file__).parent
 WEB_DIR = Path(os.environ.get("GFM_SETUP_WEB_DIR", "/app/setup-web"))
 RUN_FLOW_SCRIPT = APP_DIR / "run_flow.py"
+# Same path entrypoint.sh chowns and the vendored Auth/token_cache.py
+# writes to -- hardcoded here to match, the same way it's hardcoded in
+# entrypoint.sh, the Dockerfile's vendor clone target, and
+# docker-compose.yml's mount target (this project doesn't parameterise it
+# anywhere else either).
+SECRETS_PATH = Path("/app/vendor/Auth/secrets.json")
+_MAX_UPLOAD_BYTES = 256 * 1024  # a real secrets.json is a few KB; generous headroom
 
 SESSION_COOKIE = "wiz_session"
 SETUP_TOKEN = os.environ["SETUP_TOKEN"]  # set by entrypoint.sh; fail loudly if missing
@@ -158,6 +165,41 @@ async def _run_flow_and_watch() -> None:
 async def start_run():
     if not state.try_start():
         return JSONResponse({"detail": "a run is already in progress"}, status_code=409)
+    asyncio.create_task(_run_flow_and_watch())
+    return {"ok": True}
+
+
+@app.post("/api/upload")
+async def upload_secrets(file: UploadFile = File(...)):
+    """Bring in an existing secrets.json instead of logging in through the
+    embedded browser -- e.g. one already produced by a GoogleFindMyTools
+    instance elsewhere. Runs through the *same* run/verify flow as a fresh
+    login: Auth/token_cache.py's get_cached_value_or_set() is idempotent
+    per key, so if the uploaded file already has aas_token/owner_key
+    cached, get_aas_token()/get_owner_key() return immediately without
+    ever opening a browser -- the flow falls straight through to the
+    list_devices() smoke test, giving the same success/failure reporting
+    the browser-login path already has, with no separate code path to
+    keep in sync.
+    """
+    data = await file.read(_MAX_UPLOAD_BYTES + 1)
+    if len(data) > _MAX_UPLOAD_BYTES:
+        return JSONResponse({"detail": "file too large"}, status_code=413)
+    try:
+        parsed = json.loads(data)
+    except ValueError:
+        return JSONResponse({"detail": "not valid JSON"}, status_code=400)
+    if not isinstance(parsed, dict):
+        return JSONResponse({"detail": "must be a JSON object"}, status_code=400)
+
+    # Acquire the single-run lock *before* touching the file: if a
+    # browser-login run is already in progress, try_start() fails and
+    # nothing is written -- an uploaded file must never race a live run
+    # for the same secrets.json.
+    if not state.try_start():
+        return JSONResponse({"detail": "a run is already in progress"}, status_code=409)
+
+    SECRETS_PATH.write_text(json.dumps(parsed))
     asyncio.create_task(_run_flow_and_watch())
     return {"ok": True}
 

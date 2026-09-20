@@ -1,5 +1,7 @@
 (function () {
   const startBtn = document.getElementById("start-btn");
+  const uploadBtn = document.getElementById("upload-btn");
+  const uploadFile = document.getElementById("upload-file");
   const phaseEl = document.getElementById("phase");
   const logEl = document.getElementById("log");
 
@@ -8,7 +10,9 @@
   function renderPhase(phase) {
     phaseEl.textContent = phase;
     phaseEl.className = "phase phase-" + phase;
-    startBtn.disabled = phase === "running";
+    const running = phase === "running";
+    startBtn.disabled = running;
+    uploadBtn.disabled = running;
   }
 
   function renderLog(events) {
@@ -38,6 +42,13 @@
     }
   }
 
+  function watchRun() {
+    if (!polling) {
+      polling = setInterval(poll, 1500);
+    }
+    poll();
+  }
+
   startBtn.addEventListener("click", async () => {
     startBtn.disabled = true;
     try {
@@ -50,10 +61,28 @@
       startBtn.disabled = false;
       return;
     }
-    if (!polling) {
-      polling = setInterval(poll, 1500);
+    watchRun();
+  });
+
+  uploadBtn.addEventListener("click", async () => {
+    const file = uploadFile.files[0];
+    if (!file) return;
+    uploadBtn.disabled = true;
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        logEl.textContent = "[upload] " + (err.detail || ("HTTP " + res.status));
+        uploadBtn.disabled = false;
+        return;
+      }
+    } catch {
+      uploadBtn.disabled = false;
+      return;
     }
-    poll();
+    watchRun();
   });
 
   poll();
