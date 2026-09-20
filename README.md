@@ -8,9 +8,11 @@ Google Timeline).
 
 The service builds on the
 [`leonboe1/GoogleFindMyTools`](https://github.com/leonboe1/GoogleFindMyTools)
-library and is meant to run as an **add-on container next to an already
-configured GoogleFindMyTools container**: it shares that container's
-`Auth/secrets.json`, so **no separate login is required**.
+library. It's meant to run as an **add-on container next to an already
+configured GoogleFindMyTools container**, sharing that container's
+`Auth/secrets.json` -- or, if you don't have one, the optional [setup
+wizard](#generating-secretsjson-with-the-setup-wizard) below generates that
+file for you directly, no separate instance required.
 
 > This project is not affiliated with Google or Apple. Use at your own risk and
 > only for devices/accounts you are authorised to access.
@@ -36,8 +38,10 @@ configured GoogleFindMyTools container**: it shares that container's
 
 ## Requirements
 
-- An already **logged-in** GoogleFindMyTools container; its
-  `Auth/secrets.json` exists and holds valid tokens.
+- A `secrets.json` with valid tokens, from either:
+  - an already **logged-in** GoogleFindMyTools container, or
+  - the [setup wizard](#generating-secretsjson-with-the-setup-wizard),
+    which generates one directly, without a separate instance.
 
 ## Setup
 
@@ -65,6 +69,51 @@ Key `.env` values:
 | `PROXY_NETWORK` | Name of the external Docker network your reverse proxy is on. |
 
 All other (optional) variables are documented in `.env.example`.
+
+## Generating secrets.json with the setup wizard
+
+Already have a logged-in GoogleFindMyTools container? Point `GFM_SECRETS_FILE`
+at its `Auth/secrets.json` as described above and skip this section entirely
+-- it's simpler when you already have one.
+
+Don't have one, or need to regenerate `secrets.json` after an owner-key
+change (see "Known limitations" below)? The **setup wizard** is a second,
+opt-in container that generates it directly: it runs a real (not headless)
+Chromium inside the container and streams its screen into a web page, so you
+complete the actual Google sign-in yourself, in your own browser tab, exactly
+like signing into any other Google service. This app's own code never sees
+your password.
+
+**This is a real browser with live Google network access, gated behind a
+one-time token -- read the "Setup wizard" section in `SECURITY.md` before
+using it.** It is not started by a plain `docker compose up`.
+
+```bash
+# GFM_SECRETS_FILE must already exist as a file (even if empty JSON) before
+# the FIRST run, from either source above. If you're starting completely
+# fresh:
+mkdir -p "$(dirname "$GFM_SECRETS_FILE")"
+echo '{}' > "$GFM_SECRETS_FILE"
+
+docker compose --profile setup-wizard up -d setup-wizard
+docker compose logs setup-wizard   # prints a one-time URL with ?token=...
+```
+
+Open that URL (via whatever reverse-proxy host you've pointed at the
+`setup-wizard` service -- it has no published port, same as `findmy-map`
+itself), click Start, and complete the Google sign-in inside the embedded
+browser. **Two sign-in prompts may appear in a row** -- the wizard drives two
+separate steps of the vendored login flow, and the second one is usually (but
+not always) an instant, cookie-based continuation of the first rather than a
+fresh prompt. Once it reports success, `secrets.json` is ready and
+`findmy-map` will pick it up on its next poll.
+
+```bash
+docker compose --profile setup-wizard down   # stop it once you're done
+```
+
+Set `GFM_SETUP_WIZARD_URL` (see `.env.example`) to also show an "Open Setup
+Wizard" link on the main app's settings page.
 
 ## Web UI
 
@@ -186,6 +235,15 @@ HTTPS** (see `SECURITY.md`).
   (theme / language / login / data export / device-history reset /
   old-device deletion),
   `web/login.html`, `web/app.css`, `web/app.js`.
+- `setup/` — the opt-in setup wizard, a separate image/container (own
+  `Dockerfile`, not built or started by default). A virtual X display
+  (Xvfb) runs a real, non-headless Chromium, streamed into a browser tab via
+  noVNC/websockify; a small FastAPI app (`setup/app/main.py`) gates access
+  behind a one-time token, drives the vendored login chain in a watched
+  subprocess (`setup/app/run_flow.py`) with a hard timeout, and writes
+  directly into the same `secrets.json` `findmy-map` uses. See "Generating
+  secrets.json with the setup wizard" above and the "Setup wizard" section
+  in `SECURITY.md`.
 
 ## Environment variables
 
@@ -204,6 +262,9 @@ See `.env.example`. Summary:
 | `GFM_POLL_ALERT_AFTER` | `3` | show the "updates are failing" banner after this many failed poll cycles in a row; `0` disables it |
 | `GFM_AUTH_DISABLE` | – | `1` forces the optional login off (recovery from a lost password) |
 | `GFM_LOGIN_DELAY_MS` | `500` | fixed delay per login attempt |
+| `GFM_SETUP_WIZARD_URL` | – | shows an "Open Setup Wizard" link on the settings page when set |
+| `GFM_SETUP_TOKEN_TTL` | `900` | (setup-wizard service) how long its printed token stays redeemable |
+| `GFM_SETUP_RUN_TIMEOUT_SECONDS` | `900` | (setup-wizard service) hard ceiling on one wizard run |
 
 ## Known limitations
 
@@ -213,8 +274,11 @@ See `.env.example`. Summary:
 - "Semantic locations" (named places without coordinates, e.g. "Home") never
   get a map pin — Google's API sends no coordinates for them, so there is
   nothing to place on the map. The name is shown in the device list instead.
-- On an owner-key version change, `secrets.json` must be regenerated in the
-  existing container.
+- On an owner-key version change, `secrets.json` must be regenerated --
+  either in the existing GoogleFindMyTools container, or by re-running the
+  [setup wizard](#generating-secretsjson-with-the-setup-wizard) (it only
+  overwrites the keys it re-fetches, so a re-run resumes rather than starting
+  over).
 - `secrets.json` is written non-atomically by both containers; a conflict on an
   exactly simultaneous token refresh is theoretically possible, in practice
   unlikely.

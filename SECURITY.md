@@ -115,6 +115,64 @@ These do **not** replace the reverse-proxy authentication above.
   brute-forcing it from an already-authenticated session is impractical —
   but it is not behind the login throttle.
 
+## Setup wizard
+
+The optional `setup-wizard` service (see README "Generating secrets.json
+with the setup wizard") is a materially different security surface from the
+rest of this project: it is the **first and only place that launches a real
+browser with live network access to Google**, driven by a Selenium-controlled
+Chromium and streamed to you over noVNC. Treat it accordingly:
+
+- **Not started by default, no `restart: unless-stopped`.** It only runs
+  when explicitly invoked (`docker compose --profile setup-wizard up -d`)
+  and won't reappear on a host reboot or a plain `docker compose up -d` of
+  the rest of the stack. Stop it (`--profile setup-wizard down`) once you're
+  done — don't leave a browser-equipped container running longer than an
+  actual setup session.
+- **Independent, mandatory access gate.** It cannot share the main app's
+  session/`cred_version` state (separate process, separate container) and is
+  gated **regardless of whether the main app's optional login is on**: a
+  random token (`secrets.token_urlsafe(32)`, 256 bits) is generated fresh on
+  every container start, printed only to `docker compose logs`, and never
+  written to disk. It is redeemable for a limited window
+  (`GFM_SETUP_TOKEN_TTL`, default 900s) and, once redeemed, issues an
+  HMAC-signed session cookie for that browser only. A container restart
+  invalidates every previously issued session for free, since it mints a
+  new token/signing secret each time.
+- **Single-run lock and a hard timeout.** Only one login flow can run at a
+  time (`POST /api/start` returns 409 while one is in progress). The flow
+  runs as a watched subprocess with a hard ceiling
+  (`GFM_SETUP_RUN_TIMEOUT_SECONDS`, default 900s, covering two sequential
+  interactive Google logins plus overhead — see the design spec); on
+  timeout the subprocess and its Chromium child are terminated, then killed
+  if still alive.
+- **The embedded browser (`/vnc/`) is gated the same way as everything
+  else**, via nginx's `auth_request` against the same session cookie — an
+  unauthenticated visitor cannot see or interact with an in-progress login,
+  even if they reach the container's network address.
+- **Ephemeral by design.** Each container run starts with a fresh Chromium
+  profile — nothing about the browser session persists across restarts,
+  only `secrets.json` itself (written by the same, unmodified
+  `Auth/token_cache.py` mechanism the vendored library already uses).
+- **`--no-sandbox` Chromium.** The vendored `chrome_driver.py` already
+  launches Chromium with `--no-sandbox --disable-dev-shm-usage` — standard
+  for any containerised Chrome, since Chrome's own sandbox needs setuid-root
+  helper binaries this container deliberately doesn't grant. The container
+  itself (non-root process, no other services on its network beyond
+  loopback-bound internals) is the sandbox boundary here, not Chrome's own.
+- **This app's code never sees your Google password.** The interactive step
+  happens entirely inside Google's own pages, rendered in the browser you're
+  looking at over noVNC; the wizard only ever reads back an OAuth cookie
+  Google's page sets after you sign in, exactly like the vendored
+  GoogleFindMyTools CLI tool already does when run interactively yourself.
+- **Broader network egress than the rest of this project.** Unlike
+  `findmy-map` itself (which only talks to Google's APIs and, optionally,
+  Nominatim), the wizard's Chromium needs to reach Google's actual login
+  pages, and `undetected_chromedriver` may attempt to fetch a matching
+  chromedriver build from a CDN on first use even though `chromium-driver`
+  is already installed at build time. Don't run this service somewhere with
+  restricted egress without accounting for that.
+
 ## Supply chain
 
 The Docker image `git clone`s
@@ -122,8 +180,11 @@ The Docker image `git clone`s
 at build time (`ARG GFM_UPSTREAM_REF` in the `Dockerfile`), pinned to a
 specific commit SHA. You are trusting that
 upstream project (and its dependency tree, which includes Selenium /
-undetected-chromedriver even though no browser is launched at runtime).
-Review the pinned commit before building, and bump it deliberately.
+undetected-chromedriver even though no browser is launched at runtime in
+this main service -- the separate, opt-in setup-wizard image, `setup/
+Dockerfile`, is the exception: it does launch a real Chromium, and vendors
+the same pinned upstream commit for the same reason -- see "Setup wizard"
+above). Review the pinned commit before building, and bump it deliberately.
 
 ## Reporting a vulnerability
 
