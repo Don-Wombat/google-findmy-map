@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ca-certificates \
+      git ca-certificates gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Vendor the upstream library this project builds on, pinned to a specific
@@ -19,19 +19,30 @@ COPY service/ /app/service
 COPY web/ /app/web
 
 # COPY preserves the source files' permissions as-is, whatever they happened
-# to be on the host this was built on. The container runs as a non-root user
-# (see docker-compose.yml `user:`), so force everything world-readable here
-# instead of depending on host umask/ACLs to have gotten it right.
+# to be on the host this was built on. The container starts as root and
+# entrypoint.sh drops to a non-root UID before the app runs, so force
+# everything world-readable here instead of depending on host umask/ACLs to
+# have gotten it right.
 RUN chmod -R a+rX /app/vendor /app/service /app/web
 
-# Writable location for the SQLite database (GFM_HISTORY_DB). Owned by the
-# default non-root UID; the compose init step re-chowns the bind-mounted
-# host directory to the configured PUID:PGID. GFM_HISTORY_FILE is only used
-# to import a pre-SQLite history.json once on startup, if present.
-RUN mkdir -p /data && chown 1000:1000 /data
+# Writable location for the SQLite database (GFM_HISTORY_DB). Created here so
+# it also exists for the `build: .` local-dev path even before any volume is
+# mounted over it, but left root-owned at build time -- the real owner is
+# only known at `docker run`/`compose up` time, so entrypoint.sh chowns it to
+# the runtime PUID:PGID on every container start instead. GFM_HISTORY_FILE is
+# only used to import a pre-SQLite history.json once on startup, if present.
+RUN mkdir -p /data
 ENV GFM_HISTORY_DB=/data/history.db \
     GFM_HISTORY_FILE=/data/history.json
 
+COPY entrypoint.sh /entrypoint.sh
+# 755, not a bare "+x": COPY preserves the source file's host permissions
+# as-is (same reasoning as the chmod -R a+rX above), and "+x" alone only
+# adds the execute bit, not read -- a script needs both for a non-owner,
+# non-group UID (e.g. a custom PUID/PGID) to be able to run it at all.
+RUN chmod 755 /entrypoint.sh
+
 WORKDIR /app/service
 EXPOSE 8080
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "main.py"]

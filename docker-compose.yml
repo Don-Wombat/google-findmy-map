@@ -5,15 +5,6 @@
 # authentication. See SECURITY.md.
 
 services:
-  # One-shot init: make the bind-mounted data directory writable by the
-  # unprivileged UID the main container runs as, so you don't have to chown
-  # it on the host by hand. Runs as root on every `up`, fixes /data, exits.
-  findmy-map-init:
-    image: alpine:3
-    command: sh -c 'chown -R ${PUID:-1000}:${PGID:-1000} /data'
-    volumes:
-      - ${GFM_DATA_DIR:-./data}:/data
-
   findmy-map:
     # Pull the published image -- no repo clone or local build needed.
     image: ghcr.io/don-wombat/google-findmy-map:0.1.5
@@ -22,9 +13,6 @@ services:
     # build: .
     container_name: findmy-map
     restart: unless-stopped
-    depends_on:
-      findmy-map-init:
-        condition: service_completed_successfully
     networks:
       - proxy-net
     # findmy-map has an optional built-in login (see SECURITY.md). With it
@@ -44,6 +32,13 @@ services:
       - GFM_DEVICE_COLORS=${GFM_DEVICE_COLORS:-}
       - GFM_AUTH_DISABLE=${GFM_AUTH_DISABLE:-}
       - GFM_LOGIN_DELAY_MS=${GFM_LOGIN_DELAY_MS:-500}
+      # The container starts as root and entrypoint.sh chowns /data to
+      # PUID:PGID before dropping privileges (see entrypoint.sh). PUID/PGID
+      # must also match the owner of GFM_SECRETS_FILE, or the token file
+      # can't be read/refreshed once the app is running unprivileged:
+      #   stat -c '%u:%g' "$GFM_SECRETS_FILE"
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
     volumes:
       # SQLite database (history.db) -- persisted on the host so it survives
       # rebuilds. Treat it as sensitive personal data.
@@ -54,9 +49,6 @@ services:
       # mounted; the rest of the vendored Auth/ package comes from the git
       # clone in the Dockerfile and must NOT be overlaid.
       - ${GFM_SECRETS_FILE}:/app/vendor/Auth/secrets.json:rw
-    # Must match the owner of GFM_SECRETS_FILE, or the token file can't be
-    # read/refreshed:  stat -c '%u:%g' "$GFM_SECRETS_FILE"
-    user: "${PUID:-1000}:${PGID:-1000}"
     # No "ports:" on purpose -- reachable only from the reverse proxy on
     # proxy-net, at container port 8080 (see README).
 
