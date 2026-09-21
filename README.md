@@ -120,6 +120,13 @@ itself). The page offers two parallel ways to get a working `secrets.json`:
 Either way, once it reports success `secrets.json` is ready and `findmy-map`
 will pick it up on its next poll.
 
+If something goes wrong, `docker compose logs -f setup-wizard` shows the
+same `[stage] message` lines the page's own "Raw log" panel does, plus
+everything else running inside the container (nginx's access/error log,
+Xvfb/fluxbox/x11vnc/websockify startup, the underlying Python traceback for
+any failure) -- more than fits comfortably in the page itself, worth
+watching directly if a run doesn't succeed.
+
 ```bash
 docker compose --profile setup-wizard down   # stop it once you're done
 ```

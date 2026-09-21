@@ -154,6 +154,16 @@ Chromium and streamed to you over noVNC. Treat it accordingly:
   profile — nothing about the browser session persists across restarts,
   only `secrets.json` itself (written by the same, unmodified
   `Auth/token_cache.py` mechanism the vendored library already uses).
+- **Verbose logging, on purpose.** Everything running inside this
+  container — nginx's access/error log, the browser-automation stage
+  progress, Xvfb/fluxbox/x11vnc/websockify startup — is forwarded to
+  `docker logs`, including the source (redeemed) IP of every request nginx
+  handles. None of it is persisted beyond the container's own log driver
+  (nothing is written outside `/tmp`, which doesn't survive container
+  recreation) or includes token/credential values, only stage names and
+  short messages (see run_flow.py's own comments on what it does and
+  doesn't emit) — but treat container log retention accordingly if your
+  Docker log driver ships logs elsewhere.
 - **`--no-sandbox` Chromium.** The vendored `chrome_driver.py` already
   launches Chromium with `--no-sandbox --disable-dev-shm-usage` — standard
   for any containerised Chrome, since Chrome's own sandbox needs setuid-root
