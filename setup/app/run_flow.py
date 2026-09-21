@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import time
+import traceback
 
 # Capture the real, unredirected stdout before anything below touches
 # sys.stdout -- this is what progress lines actually get written to.
@@ -86,16 +87,41 @@ def main() -> int:
             _current_stage["value"] = "owner_key"
             from SpotApi.GetEidInfoForE2eeDevices.get_owner_key import get_owner_key
             get_owner_key()
+    except Exception as e:  # noqa: BLE001 -- deliberately broad, this is a leaf process
+        # Never the raw exception repr on the wire: some of these
+        # exceptions carry response bodies that could include token
+        # material. Type name plus a short, truncated message only for the
+        # client; the full traceback still goes to this process's real
+        # stderr (supervisord routes that to /tmp/wizard.log, not the
+        # browser) since it costs nothing and is what actually diagnoses a
+        # report like this one.
+        traceback.print_exc(file=sys.stderr)
+        _emit_final(False, f"{type(e).__name__}: {str(e)[:200]}")
+        return 1
 
+    # secrets.json already has everything it needs at this point --
+    # aas_token/owner_key/shared_key/fcm_credentials/username are all
+    # written by Auth/token_cache.py as a side effect of the two calls
+    # above succeeding. list_devices() below is only a confidence check
+    # (it has no side effect on secrets.json), so a failure in it must not
+    # report the whole run as failed when the actual goal already
+    # succeeded -- reported as a real bug (2026-09-21): undetected_chromedriver
+    # has a known __del__/cleanup issue (ValueError: invalid literal for
+    # int() with base 10: '') when a driver object from an earlier step is
+    # garbage-collected after create_driver()'s own `pkill -f chrome` (run
+    # at the start of the *next* browser session) already killed its
+    # process out from under it -- this can happen well after the
+    # try/except above has already exited successfully.
+    try:
+        with contextlib.redirect_stdout(adapter):
             _current_stage["value"] = "verify"
             from NovaApi.ListDevices.nbe_list_devices import list_devices
             list_devices()
-    except Exception as e:  # noqa: BLE001 -- deliberately broad, this is a leaf process
-        # Never the raw exception repr: some of these exceptions carry
-        # response bodies that could include token material. Type name plus
-        # a short, truncated message only.
-        _emit_final(False, f"{type(e).__name__}: {str(e)[:200]}")
-        return 1
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc(file=sys.stderr)
+        _emit(_current_stage["value"],
+              f"Verification had a problem, but your tokens were saved "
+              f"successfully ({type(e).__name__}: {str(e)[:200]})")
 
     _emit_final(True)
     return 0

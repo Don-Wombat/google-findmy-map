@@ -411,3 +411,27 @@ def test_run_flow_error_is_short_and_typed_not_a_raw_repr(monkeypatch, capsys):
     assert final["ok"] is False
     assert final["error"].startswith("RuntimeError:")
     assert len(final["error"]) < 250
+
+
+def test_run_flow_verify_failure_is_non_fatal(monkeypatch, capsys):
+    """Reported against a real run (2026-09-21): aas_token and owner_key
+    both genuinely succeeded (devices were listed) but the process still
+    reported failure -- undetected_chromedriver has a known __del__/
+    cleanup ValueError that can surface here, well after the actual work
+    (secrets.json's keys) is already done. A crash in the verify-only
+    list_devices() step must not mask that success."""
+    _stub_module(monkeypatch, "Auth.aas_token_retrieval",
+                 get_aas_token=lambda: None)
+    _stub_module(monkeypatch, "SpotApi.GetEidInfoForE2eeDevices.get_owner_key",
+                 get_owner_key=lambda: None)
+    _stub_module(monkeypatch, "NovaApi.ListDevices.nbe_list_devices",
+                 list_devices=lambda: (_ for _ in ()).throw(
+                     ValueError("invalid literal for int() with base 10: ''")))
+
+    run_flow = _import_run_flow(monkeypatch)
+    rc = run_flow.main()
+
+    assert rc == 0
+    lines = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert lines[-1] == {"stage": "done", "ok": True}
+    assert any("Verification had a problem" in l.get("msg", "") for l in lines)
