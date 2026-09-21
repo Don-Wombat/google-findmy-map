@@ -285,6 +285,29 @@ def test_upload_writes_file_and_triggers_verify(monkeypatch, tmp_path):
         client.__exit__(None, None, None)
 
 
+def test_upload_strips_a_leading_utf8_bom(monkeypatch, tmp_path):
+    """A file re-saved by some Windows tools picks up a UTF-8 BOM --
+    json.loads() rejects that outright as invalid JSON at char 0
+    otherwise. Reported against a real production secrets.json that
+    should have been valid."""
+    client, wizard_main = _authed_client(monkeypatch, token="t")
+    try:
+        secrets_path = tmp_path / "secrets.json"
+        monkeypatch.setattr(wizard_main, "SECRETS_PATH", secrets_path)
+        fake = _write_fake_flow(tmp_path, [{"stage": "done", "ok": True}],
+                                 name="fake_bom_flow.py")
+        monkeypatch.setattr(wizard_main, "RUN_FLOW_SCRIPT", fake)
+
+        uploaded = {"aas_token": "already-have-this"}
+        body = b"\xef\xbb\xbf" + json.dumps(uploaded).encode()
+        resp = client.post("/api/upload",
+                            files={"file": ("secrets.json", body, "application/json")})
+        assert resp.status_code == 200
+        assert json.loads(secrets_path.read_text()) == uploaded
+    finally:
+        client.__exit__(None, None, None)
+
+
 def test_upload_rejected_while_a_run_is_in_progress(monkeypatch, tmp_path):
     client, wizard_main = _authed_client(monkeypatch, token="t")
     try:

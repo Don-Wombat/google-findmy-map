@@ -186,9 +186,17 @@ async def upload_secrets(file: UploadFile = File(...)):
     if len(data) > _MAX_UPLOAD_BYTES:
         return JSONResponse({"detail": "file too large"}, status_code=413)
     try:
-        parsed = json.loads(data)
-    except ValueError:
-        return JSONResponse({"detail": "not valid JSON"}, status_code=400)
+        # utf-8-sig, not utf-8: strips a leading UTF-8 BOM if present
+        # (harmless either way when there isn't one) -- a file re-saved
+        # by some Windows tools picks one up, which json.loads() would
+        # otherwise reject outright as invalid JSON at char 0.
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        return JSONResponse({"detail": f"not UTF-8 text: {e}"}, status_code=400)
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as e:
+        return JSONResponse({"detail": f"not valid JSON: {e}"}, status_code=400)
     if not isinstance(parsed, dict):
         return JSONResponse({"detail": "must be a JSON object"}, status_code=400)
 
