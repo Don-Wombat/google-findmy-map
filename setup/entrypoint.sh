@@ -34,6 +34,17 @@ if [ "$(id -u)" = '0' ]; then
     fi
     chown "${PUID:-1000}:${PGID:-1000}" "$SECRETS_PATH"
 
+    # fluxbox's default startup tries to restore a wallpaper via fbsetbg,
+    # which pops up an xmessage dialog ("I can't find an app to set the
+    # wallpaper with...") right in the middle of the streamed browser view
+    # when none is configured -- confusing for whoever is trying to log in.
+    # session.screen0.rootCommand: (empty) is fluxbox's documented way to
+    # disable that attempt entirely. Recreated every start since /tmp's
+    # persistence isn't guaranteed across container recreation.
+    mkdir -p /tmp/.fluxbox
+    printf 'session.screen0.rootCommand:\n' > /tmp/.fluxbox/init
+    chown -R "${PUID:-1000}:${PGID:-1000}" /tmp/.fluxbox
+
     SETUP_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
     export SETUP_TOKEN
     echo "=============================================================="
@@ -44,4 +55,16 @@ if [ "$(id -u)" = '0' ]; then
     exec gosu "${PUID:-1000}:${PGID:-1000}" "$0" "$@"
 fi
 
+# Reached on the second invocation, now running as the non-root PUID --
+# NOT set before the gosu call above: gosu resets HOME to match the
+# target UID's /etc/passwd entry regardless of what was exported earlier
+# (confirmed empirically -- an export right before "exec gosu ..." was
+# silently discarded), defaulting to "/" when, as here, that UID has no
+# passwd entry at all. "/" isn't writable by this non-root PUID, which
+# broke undetected_chromedriver's driver-patcher cache ("Permission
+# denied: '/.local'") and left fluxbox unable to read/write its own
+# config ("//.fluxbox", HOME resolving to empty). /tmp is writable by any
+# UID and this container is ephemeral by design (see SECURITY.md), so
+# nothing here needs to persist across restarts.
+export HOME=/tmp
 exec "$@"
