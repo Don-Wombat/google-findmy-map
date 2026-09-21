@@ -124,10 +124,19 @@ async def _run_flow_and_watch() -> None:
             if "stage" in event and "ok" in event:
                 if event["ok"]:
                     state.finish("success")
+                    print("[run_flow] done: success", flush=True)
                 else:
                     state.finish("failed", error=event.get("error"))
+                    print(f"[run_flow] done: failed -- {event.get('error')}", flush=True)
             else:
-                state.append_log(event.get("stage", "?"), event.get("msg", ""))
+                stage, msg = event.get("stage", "?"), event.get("msg", "")
+                state.append_log(stage, msg)
+                # Same log line the web UI's (collapsed by default) raw-log
+                # panel shows -- also on this process's own stdout, which
+                # entrypoint.sh's background `tail -F` forwards into
+                # `docker logs`, so the whole run is visible there too
+                # without needing to open the wizard page at all.
+                print(f"[{stage}] {msg}", flush=True)
 
     reader_task = asyncio.create_task(_read_output())
     try:

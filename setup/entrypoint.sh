@@ -67,4 +67,26 @@ fi
 # UID and this container is ephemeral by design (see SECURITY.md), so
 # nothing here needs to persist across restarts.
 export HOME=/tmp
+
+# Forward every supervised program's log into `docker logs`. supervisord
+# itself can't do this directly here: pointing a program's own
+# stdout_logfile at /dev/stdout or even /proc/1/fd/1 fails with EACCES
+# every time, confirmed empirically to be specific to this gosu-based
+# privilege-drop setup -- the container's stdout pipe is created while
+# still root, and re-opening it via a fresh open() call as a UID that
+# only exists because of a later setuid() (gosu), rather than one Docker
+# itself started the container as, doesn't have permission on the
+# underlying pipe object (a plain `docker run -u <uid>` container, where
+# the runtime sets the UID up front, does not hit this). `tail`, run as a
+# plain backgrounded shell job here rather than as a supervisord program,
+# sidesteps the problem entirely: it inherits this shell's *already open*
+# fd 1 directly (no reopen), which was set up correctly before gosu ever
+# ran. Pre-touch every expected file so `tail -F`'s glob has something
+# concrete to watch from the start rather than waiting on files that
+# don't exist yet.
+touch /tmp/xvfb.log /tmp/windowmanager.log /tmp/x11vnc.log \
+      /tmp/websockify.log /tmp/nginx.log /tmp/wizard.log
+tail -F /tmp/xvfb.log /tmp/windowmanager.log /tmp/x11vnc.log \
+        /tmp/websockify.log /tmp/nginx.log /tmp/wizard.log &
+
 exec "$@"
