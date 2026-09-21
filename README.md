@@ -8,11 +8,10 @@ Google Timeline).
 
 The service builds on the
 [`leonboe1/GoogleFindMyTools`](https://github.com/leonboe1/GoogleFindMyTools)
-library. It's meant to run as an **add-on container next to an already
-configured GoogleFindMyTools container**, sharing that container's
-`Auth/secrets.json` -- or, if you don't have one, the optional [setup
-wizard](#generating-secretsjson-with-the-setup-wizard) below generates that
-file for you directly, no separate instance required.
+library. It needs a `secrets.json` with valid Google tokens — either shared
+from an already-configured GoogleFindMyTools container, or generated
+directly with the built-in [setup wizard](#getting-started), no separate
+instance required.
 
 > This project is not affiliated with Google or Apple. Use at your own risk and
 > only for devices/accounts you are authorised to access.
@@ -36,62 +35,33 @@ file for you directly, no separate instance required.
 
 <sub>All screenshots use synthetic demo data (fictional devices moving around Berlin), not real location history.</sub>
 
-## Requirements
+## Getting started
 
-- A `secrets.json` with valid tokens, from either:
-  - an already **logged-in** GoogleFindMyTools container, or
-  - the [setup wizard](#generating-secretsjson-with-the-setup-wizard),
-    which generates one directly, without a separate instance.
+### 1. Get the compose files
 
-## Setup
-
-Grab only `docker-compose.yml` and `.env.example` — the image is pulled from
-GHCR, no clone or local build needed:
+No clone needed — the image is pulled from GHCR:
 
 ```bash
 mkdir google-findmy-map && cd google-findmy-map
 curl -O https://raw.githubusercontent.com/Don-Wombat/google-findmy-map/main/docker-compose.yml
 curl -o .env https://raw.githubusercontent.com/Don-Wombat/google-findmy-map/main/.env.example
-# edit .env: GFM_SECRETS_FILE, GFM_DATA_DIR, PUID/PGID, PROXY_NETWORK
-docker compose up -d
 ```
 
-To build from source instead, clone the repo and flip `image:` back to
-`build: .` in `docker-compose.yml`, then `docker compose up -d --build`.
+To build from source instead: clone the repo, flip `image:` to `build: .`
+in `docker-compose.yml`, and add `--build` to the `up -d` in step 3.
 
-Key `.env` values:
+### 2. Get a secrets.json
 
-| Variable | Meaning |
-|---|---|
-| `GFM_SECRETS_FILE` | Host path to the **single** `secrets.json` of the existing GoogleFindMyTools container. Bind-mounted read-write so token refreshes stay in sync between both containers. Do **not** mount the whole `Auth/` folder — only this one file. |
-| `GFM_DATA_DIR` | Host directory for this service's SQLite database (`history.db`). Holds raw location data — treat it as personal data. |
-| `PUID` / `PGID` | Owner of the two paths above, and the UID/GID the app process runs as. The container starts as root just long enough for its entrypoint to chown `GFM_DATA_DIR` to match, then drops to this user before running the app. Check with `stat -c '%u:%g' "$GFM_SECRETS_FILE"`. |
-| `PROXY_NETWORK` | Name of the external Docker network your reverse proxy is on. |
+**Already have a logged-in GoogleFindMyTools container?** Point
+`GFM_SECRETS_FILE` (step 3) at its `Auth/secrets.json` and skip ahead —
+nothing else to do here.
 
-All other (optional) variables are documented in `.env.example`.
-
-## Generating secrets.json with the setup wizard
-
-Already have a logged-in GoogleFindMyTools container? Point `GFM_SECRETS_FILE`
-at its `Auth/secrets.json` as described above and skip this section entirely
--- it's simpler when you already have one.
-
-Don't have one, or need to regenerate `secrets.json` after an owner-key
-change (see "Known limitations" below)? The **setup wizard** is a second,
-opt-in container that generates it directly: it runs a real (not headless)
-Chromium inside the container and streams its screen into a web page, so you
-complete the actual Google sign-in yourself, in your own browser tab, exactly
-like signing into any other Google service. This app's own code never sees
-your password.
-
-**This is a real browser with live Google network access, gated behind a
-one-time token -- read the "Setup wizard" section in `SECURITY.md` before
-using it.** It is not started by a plain `docker compose up`.
+**Starting from scratch?** Use the built-in **setup wizard** — a second,
+opt-in container with an embedded browser that walks you through signing
+in to Google yourself; this app's own code never sees your password.
 
 ```bash
-# GFM_SECRETS_FILE must already exist as a file (even if empty JSON) before
-# the FIRST run, from either source above. If you're starting completely
-# fresh:
+# GFM_SECRETS_FILE must exist as a file before the very first run:
 mkdir -p "$(dirname "$GFM_SECRETS_FILE")"
 echo '{}' > "$GFM_SECRETS_FILE"
 
@@ -99,120 +69,90 @@ docker compose --profile setup-wizard up -d setup-wizard
 docker compose logs setup-wizard   # prints a one-time URL with ?token=...
 ```
 
-Open that URL (via whatever reverse-proxy host you've pointed at the
-`setup-wizard` service -- it has no published port, same as `findmy-map`
-itself). The page offers two parallel ways to get a working `secrets.json`:
-
-- **Start browser login** -- complete the Google sign-in yourself inside the
-  embedded browser. **Two sign-in prompts may appear in a row** -- the
-  wizard drives two separate steps of the vendored login flow, and the
-  second one is usually (but not always) an instant, cookie-based
-  continuation of the first rather than a fresh prompt.
-- **Upload an existing `secrets.json`** -- already have one from somewhere
-  else (a GoogleFindMyTools instance you don't want to live-mount, a backup,
-  a file copied from another machine)? Pick it in the file field and click
-  "Upload & verify" instead -- no browser needed. It's checked the exact
-  same way a fresh login is: if the file already has working tokens, the
-  wizard confirms that against the real API immediately; if it's only
-  partially complete, the missing pieces are fetched the normal way
-  (falling back to the embedded browser for whatever's still missing).
-
-Either way, once it reports success `secrets.json` is ready and `findmy-map`
-will pick it up on its next poll.
-
-If something goes wrong, `docker compose logs -f setup-wizard` shows the
-same `[stage] message` lines the page's own "Raw log" panel does, plus
-everything else running inside the container (nginx's access/error log,
-Xvfb/fluxbox/x11vnc/websockify startup, the underlying Python traceback for
-any failure) -- more than fits comfortably in the page itself, worth
-watching directly if a run doesn't succeed.
+Open that URL (via whatever reverse-proxy host you've pointed at it — no
+port is published, same as the main app) and either **start the browser
+login** (two Google sign-in prompts in a row is normal, not a bug) or
+**upload an existing `secrets.json`** from elsewhere — verified against the
+real API either way. Once it reports success, stop the wizard again; it's
+not needed for normal operation:
 
 ```bash
-docker compose --profile setup-wizard down   # stop it once you're done
+docker compose --profile setup-wizard down
 ```
 
-Set `GFM_SETUP_WIZARD_URL` (see `.env.example`) to also show an "Open Setup
-Wizard" link on the main app's settings page.
+Something not working? `docker compose logs -f setup-wizard` shows
+everything, not just what fits on the page. This is a real browser with
+live Google network access — read the "Setup wizard" section in
+`SECURITY.md` before using it. Set `GFM_SETUP_WIZARD_URL` (below) to also
+link it from the main app's settings page.
+
+### 3. Configure and start
+
+| Variable | Meaning |
+|---|---|
+| `GFM_SECRETS_FILE` | Host path to the **single** `secrets.json` from step 2. Bind-mounted read-write so token refreshes stay in sync. Do **not** mount the whole `Auth/` folder — only this one file. |
+| `GFM_DATA_DIR` | Host directory for the SQLite database (`history.db`) — treat it as personal data. |
+| `PUID` / `PGID` | Owner of the two paths above; the app runs as this user. Check with `stat -c '%u:%g' "$GFM_SECRETS_FILE"`. |
+| `PROXY_NETWORK` | Name of the external Docker network your reverse proxy is on. |
+
+All other (optional) variables are documented in `.env.example` and in
+[Environment variables](#environment-variables) below.
+
+```bash
+docker compose up -d
+```
 
 ## Web UI
 
-- **Light/dark toggle** (☀/☾ in the header of both pages), remembered in the
-  browser. In dark mode the OSM tiles are darkened via a CSS filter (building
-  outlines / streets / labels stay intact); no API key.
-- **Language toggle** (EN/DE in the header), also remembered in the browser.
-- The map fills the screen; the device list sits on top as a **floating panel**
-  (top right on desktop, sized to its content; a collapsible bottom sheet on
-  narrow screens). Sorted by most recent location; clicking a row centres the
-  map.
-- Each device has its own pin colour; the last 5 positions are joined by a
-  line.
-- **Edit devices:** the ✎ button on each row → change the display name, pick a
-  pin colour from a palette, and put the device in a **group** (free text,
-  with suggestions from the groups already in use). **Default** clears all
+### Map
+
+- **Light/dark** and **language (EN/DE)** toggles in the header, both
+  remembered in the browser. Dark mode darkens the OSM tiles via a CSS
+  filter — no API key, building outlines and labels stay intact.
+- The map fills the screen; devices sit in a **floating panel** (a
+  collapsible bottom sheet on mobile), sorted by most recent location.
+  Each has its own pin colour and a track of its last 5 positions.
+- **Edit** (✎) a device to rename it, pick a pin colour, or put it in a
+  free-text **group** — grouped devices collapse into sections, and
+  collapsing one also hides its pins from the map. **Default** clears all
   three.
-- **Groups:** once any device has a group, the list is split into collapsible
-  sections ("Familie", "Fahrzeuge", …) with an "Ungrouped" section at the
-  bottom. Collapsing a group also hides its pins from the map — collapsed
-  state is remembered per browser. The timeline's device picker groups the
-  same way (`<optgroup>`).
-- **Old devices:** the settings page lists devices that no longer appear in
-  the poll (still in the timeline picker, gone from the map) and lets you
-  delete one — its whole history and its overrides. The delete is keyed on
-  the device id, never the name, and the confirm step shows the full id, so
-  two devices you happened to rename to the same name stay distinguishable;
-  a device that is still live cannot be deleted.
-- **Reset a device's history:** also on the settings page, a device picker
-  (every device, live or stale) lets you wipe just its location history —
-  unlike deleting the device, its name/colour/group overrides are kept.
-  There is no liveness restriction: resetting a live device's history
-  simply starts it fresh from the next poll.
-- **Ring a device:** the 🔔 button on each row makes it play its "find my
-  device" sound; tap again (or wait ~30 s) to stop. The button shakes the
-  instant the tap registers — there's a real multi-second FCM round-trip
-  before the phone actually rings, so that feedback can't wait on the
-  network.
-- A device whose last report is a **semantic location** (a named place
-  without coordinates, e.g. "Home") gets no map pin — Google's API doesn't
-  send coordinates for those — but the place name is shown in the device
-  list instead of being silently dropped.
-- **Polling-failure banner:** a red bar across the top of the map and
-  timeline pages once polling has failed `GFM_POLL_ALERT_AFTER` times in a
-  row (default 3 — an expired `secrets.json`, an upstream break), so you
-  find out without opening the app to check. It clears itself when polling
-  recovers. `GET /api/health` exposes the same state for an external
-  uptime monitor.
-- **Timeline** (`timeline.html`): pick a device, then step through by
-  **Day / Week / Month** with the ‹ › arrows (or pick a free **Range**) →
-  the full track as a line, plus a **list of visited places** (address,
-  arrival–departure, duration) with numbered markers. A visit is only
-  formed when the stored history actually contains several reports from
-  *one* place (radius `GFM_VISIT_RADIUS_M`) spanning at least
-  `GFM_VISIT_MIN_MINUTES` — with a still sparse history a note is shown,
-  and it fills in over time. Long visit lists are capped with a "show
-  more" button so the export controls below stay reachable. The device
-  picker lists every device ever seen, not just ones in the current poll;
-  the chosen view mode + date are remembered per browser. Each visited
-  place can also be deleted — this hard-deletes the underlying raw points
-  for that stay (so it also shortens the track shown for that period) and
-  cannot be undone.
-- **Export:** the timeline offers **GPX / GeoJSON / CSV** downloads of the
-  track and of the visited places for the chosen device and date range; the
-  settings page has a per-device **full-history** export. For backup, or for
-  QGIS / Google Earth / a script.
+- **Ring** (🔔) plays the device's "find my device" sound; tap again (or
+  wait ~30s) to stop.
+- A **semantic location** (a named place with no coordinates, e.g. "Home")
+  gets no map pin but still shows in the device list.
+- A red **banner** appears after `GFM_POLL_ALERT_AFTER` failed polls in a
+  row (default 3) and clears itself once polling recovers — `GET
+  /api/health` exposes the same state for an external uptime monitor.
+
+### Timeline
+
+- Step through **Day / Week / Month**, or a free **Range**, per device —
+  the full track plus a list of **visited places** (address, duration),
+  each deletable individually. A visit needs enough history clustered in
+  one spot (`GFM_VISIT_RADIUS_M`, `GFM_VISIT_MIN_MINUTES`) to form; it
+  fills in as more data comes in.
+- **Export** GPX / GeoJSON / CSV for the track or visited places, scoped
+  to the chosen device and date range.
+
+### Settings
+
+- **Old devices** that dropped out of the poll can be deleted — id-keyed,
+  not name-keyed (renamed duplicates stay distinguishable), and a still-live
+  device can't be deleted.
+- **Reset history** wipes just a device's location data, keeping its
+  name/colour/group.
+- Per-device **full-history export**, and (if `GFM_SETUP_WIZARD_URL` is
+  set) a link to the setup wizard.
 
 ### Authentication
 
-Optional and **off by default**. Open the settings page (the ⚙ icon in the
-header), tick **Require login** and set a username and a password (min. 8
-characters) — both are required the first time you enable it. From then on
-every page and API call needs the session cookie from the login page. The
-same settings page changes the username, the password, or turns auth off
-again (all three ask for the current password).
+Optional, **off by default**. On the settings page (⚙), tick **Require
+login** and set a username + password (min. 8 characters) — both required
+the first time. The same page later changes them or turns auth off again.
 
-If you lock yourself out — forgotten username or password — set
-`GFM_AUTH_DISABLE=1` and restart — auth is forced off so you can reset it.
-With auth enabled you can expose the service directly, but **only over
-HTTPS** (see `SECURITY.md`).
+Locked out? Set `GFM_AUTH_DISABLE=1` and restart to force it off. With auth
+enabled you can expose the service directly, but **only over HTTPS** (see
+`SECURITY.md`).
 
 ## How it works
 
@@ -260,9 +200,8 @@ HTTPS** (see `SECURITY.md`).
   noVNC/websockify; a small FastAPI app (`setup/app/main.py`) gates access
   behind a one-time token, drives the vendored login chain in a watched
   subprocess (`setup/app/run_flow.py`) with a hard timeout, and writes
-  directly into the same `secrets.json` `findmy-map` uses. See "Generating
-  secrets.json with the setup wizard" above and the "Setup wizard" section
-  in `SECURITY.md`.
+  directly into the same `secrets.json` `findmy-map` uses. See "Getting
+  started" above and the "Setup wizard" section in `SECURITY.md`.
 
 ## Environment variables
 
@@ -295,9 +234,8 @@ See `.env.example`. Summary:
   nothing to place on the map. The name is shown in the device list instead.
 - On an owner-key version change, `secrets.json` must be regenerated --
   either in the existing GoogleFindMyTools container, or by re-running the
-  [setup wizard](#generating-secretsjson-with-the-setup-wizard) (it only
-  overwrites the keys it re-fetches, so a re-run resumes rather than starting
-  over).
+  [setup wizard](#getting-started) (it only overwrites the keys it
+  re-fetches, so a re-run resumes rather than starting over).
 - `secrets.json` is written non-atomically by both containers; a conflict on an
   exactly simultaneous token refresh is theoretically possible, in practice
   unlikely.
