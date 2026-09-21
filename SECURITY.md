@@ -117,11 +117,11 @@ These do **not** replace the reverse-proxy authentication above.
 
 ## Setup wizard
 
-The optional `setup-wizard` service (see README "Generating secrets.json
-with the setup wizard") is a materially different security surface from the
-rest of this project: it is the **first and only place that launches a real
-browser with live network access to Google**, driven by a Selenium-controlled
-Chromium and streamed to you over noVNC. Treat it accordingly:
+The optional `setup-wizard` service (see README "Getting started") is a
+materially different security surface from the rest of this project: it is
+the **first and only place that launches a real browser with live network
+access to Google**, driven by a Selenium-controlled Chromium and streamed to
+you over noVNC. Treat it accordingly:
 
 - **Not started by default, no `restart: unless-stopped`.** It only runs
   when explicitly invoked (`docker compose --profile setup-wizard up -d`)

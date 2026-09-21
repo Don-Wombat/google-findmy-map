@@ -60,8 +60,8 @@ services:
   # Opt-in: generates secrets.json via an embedded, remote-controlled
   # browser instead of requiring a separately-run GoogleFindMyTools
   # instance. NOT started by plain `docker compose up` -- see README
-  # "Generating secrets.json with the setup wizard" for the exact
-  # `--profile setup-wizard` invocation. This is a real, non-headless
+  # "Getting started" for the exact `--profile setup-wizard` invocation.
+  # This is a real, non-headless
   # Chromium with live Google network egress; do not leave it running
   # longer than an actual setup session (see SECURITY.md).
   setup-wizard:

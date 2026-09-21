@@ -20,8 +20,8 @@ if [ "$(id -u)" = '0' ]; then
         echo "Fix, on the HOST (not in this container):" >&2
         echo "  rmdir '<that host path>'   # remove Docker's empty directory" >&2
         echo "  echo '{}' > '<that host path>'   # pre-create it as a file" >&2
-        echo "Then restart this container. See README 'Generating secrets.json" >&2
-        echo "with the setup wizard' for the full first-run steps." >&2
+        echo "Then restart this container. See README 'Getting started'" >&2
+        echo "for the full first-run steps." >&2
         exit 1
     fi
     # Only reachable if nothing was ever mounted over this path at all
