@@ -11,10 +11,8 @@
     <h1>Setup Wizard</h1>
     <p class="hint">
       This generates <code>secrets.json</code> by logging into your Google
-      account inside the embedded browser below. Two sign-in prompts may
-      appear in a row -- that's expected (see README). Nothing you type here
-      is seen by this app itself; it happens directly inside Google's own
-      pages, rendered in the browser view below.
+      account inside an embedded browser. Nothing you type there is seen by
+      this app itself; it happens directly inside Google's own pages.
     </p>
 
     <section class="status-bar">
@@ -22,7 +20,40 @@
       <span id="phase" class="phase phase-idle">idle</span>
     </section>
 
-    <pre id="log" class="log" aria-live="polite"></pre>
+    <ol id="steps" class="steps" hidden>
+      <li class="step" data-stage="aas_token">
+        <span class="step-icon" aria-hidden="true"></span>
+        <span class="step-label">Sign in to Google</span>
+      </li>
+      <li class="step" data-stage="owner_key">
+        <span class="step-icon" aria-hidden="true"></span>
+        <span class="step-label">Fetch encryption keys</span>
+      </li>
+      <li class="step" data-stage="verify">
+        <span class="step-icon" aria-hidden="true"></span>
+        <span class="step-label">Confirm everything works</span>
+      </li>
+    </ol>
+
+    <p id="waiting-hint" class="hint waiting-hint" hidden>
+      Setting up the browser can take up to half a minute before anything
+      appears below -- this is expected, not stuck. <strong>You will
+      likely be asked to sign in to Google twice in a row</strong> (once
+      for the account itself, once more for end-to-end-encrypted data) --
+      that is also expected, not a bug.
+    </p>
+
+    <p id="error-box" class="error-box" hidden></p>
+
+    <details class="raw-log">
+      <summary>Raw log (for troubleshooting)</summary>
+      <pre id="log" aria-live="polite"></pre>
+    </details>
+
+    <section class="browser-frame" id="browser-frame" hidden>
+      <iframe id="vnc-frame" src="/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true"
+              title="Embedded browser -- complete the Google login here"></iframe>
+    </section>
 
     <section class="upload-section">
       <h2>Already have a secrets.json?</h2>
@@ -33,11 +64,6 @@
       </p>
       <input type="file" id="upload-file" accept="application/json,.json">
       <button id="upload-btn" type="button">Upload &amp; verify</button>
-    </section>
-
-    <section class="browser-frame">
-      <iframe id="vnc-frame" src="/vnc/vnc.html?autoconnect=true&resize=scale&reconnect=true"
-              title="Embedded browser -- complete the Google login here"></iframe>
     </section>
   </main>
   <script src="app.js"></script>
