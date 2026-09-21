@@ -43,19 +43,18 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY app/ /app/setup-app
 COPY web/ /app/setup-web
 
-# Same reasoning as the root Dockerfile: COPY preserves host permissions
-# as-is, and the container starts as root only long enough to chown the
-# secrets file before dropping to PUID:PGID -- force everything
-# world-readable here rather than depending on host umask/ACLs. /app
-# itself is included (not just its children): it was implicitly created
-# by the "git clone .../app/vendor" step above, before WORKDIR touched it,
-# so its permissions come from whatever umask the build host happened to
-# have -- confirmed empirically to matter (this repo's own dev sidecar has
-# a restrictive enough umask that /app ends up non-traversable for any UID
-# but root without this, which then breaks every non-root process's
-# chdir/open under /app, not just this image's own -- the root Dockerfile
-# has the same latent, umask-dependent gap; worth hardening there too, but
-# out of scope for this change).
+# Same reasoning as the root Dockerfile (which has the identical fix, for
+# the identical reason): COPY preserves host permissions as-is, and the
+# container starts as root only long enough to chown the secrets file
+# before dropping to PUID:PGID -- force everything world-readable here
+# rather than depending on host umask/ACLs. /app itself is included (not
+# just its children): it was implicitly created by the "git clone
+# .../app/vendor" step above, before WORKDIR touched it, so its
+# permissions come from whatever umask the build host happened to have --
+# confirmed empirically to matter on a build host with a restrictive
+# enough umask that /app ends up non-traversable for any UID but root
+# without this, which then breaks every non-root process's chdir/open
+# under /app, not just this image's own.
 RUN chmod a+rX /app && chmod -R a+rX /app/vendor /app/setup-app /app/setup-web
 
 COPY nginx.conf /etc/nginx/nginx.conf

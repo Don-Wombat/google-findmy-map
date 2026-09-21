@@ -13,7 +13,14 @@ RUN git clone https://github.com/leonboe1/GoogleFindMyTools.git /app/vendor \
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    # pip-installed files inherit the build host's umask same as COPY does
+    # -- a restrictive build-host umask leaves them unreadable to anyone
+    # but root, breaking every import for the non-root runtime user
+    # (confirmed against the setup-wizard image's identical Dockerfile
+    # pattern: surfaces as a confusing ModuleNotFoundError, not an
+    # obvious permissions error).
+    && chmod -R a+rX /usr/local/lib/python3.11/site-packages /usr/local/bin
 
 COPY service/ /app/service
 COPY web/ /app/web
@@ -22,8 +29,15 @@ COPY web/ /app/web
 # to be on the host this was built on. The container starts as root and
 # entrypoint.sh drops to a non-root UID before the app runs, so force
 # everything world-readable here instead of depending on host umask/ACLs to
-# have gotten it right.
-RUN chmod -R a+rX /app/vendor /app/service /app/web
+# have gotten it right. /app itself is included (not just its children): it
+# was implicitly created by the "git clone .../app/vendor" step above,
+# before WORKDIR touched it, so its permissions come from whatever umask
+# the build host happened to have -- confirmed empirically to matter on a
+# build host with a restrictive enough umask that /app ends up
+# non-traversable for any UID but root ("can't open file
+# '/app/service/main.py': Permission denied"), breaking every non-root
+# process's access under it regardless of what's chmod'd underneath.
+RUN chmod a+rX /app && chmod -R a+rX /app/vendor /app/service /app/web
 
 # Writable location for the SQLite database (GFM_HISTORY_DB). Created here so
 # it also exists for the `build: .` local-dev path even before any volume is
