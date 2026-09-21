@@ -200,7 +200,10 @@ enabled you can expose the service directly, but **only over HTTPS** (see
   noVNC/websockify; a small FastAPI app (`setup/app/main.py`) gates access
   behind a one-time token, drives the vendored login chain in a watched
   subprocess (`setup/app/run_flow.py`) with a hard timeout, and writes
-  directly into the same `secrets.json` `findmy-map` uses. See "Getting
+  directly into the same `secrets.json` `findmy-map` uses. The
+  embedded-browser-over-noVNC approach was inspired by
+  [`Smeagolworms4/GoogleFindMyTools`](https://github.com/Smeagolworms4/GoogleFindMyTools),
+  which does the same for the underlying CLI tool itself. See "Getting
   started" above and the "Setup wizard" section in `SECURITY.md`.
 
 ## Environment variables
