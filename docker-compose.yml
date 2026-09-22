@@ -7,7 +7,7 @@
 services:
   findmy-map:
     # Pull the published image -- no repo clone or local build needed.
-    image: ghcr.io/don-wombat/google-findmy-map:0.1.8
+    image: ghcr.io/don-wombat/google-findmy-map:0.1.9
     # To build locally instead (e.g. for development), comment out the line
     # above and uncomment the one below:
     # build: .
