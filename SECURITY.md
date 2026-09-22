@@ -151,7 +151,12 @@ you over noVNC. Treat it accordingly:
   (`GFM_SETUP_TOKEN_TTL`, default 900s) and, once redeemed, issues an
   HMAC-signed session cookie for that browser only. A container restart
   invalidates every previously issued session for free, since it mints a
-  new token/signing secret each time.
+  new token/signing secret each time. Like the main app's own session
+  cookie, it is flagged `Secure` automatically when the request arrived
+  over HTTPS (`X-Forwarded-Proto`-aware, same detection as above), and
+  `POST /api/start`/`POST /api/upload` also check `Sec-Fetch-Site` the same
+  way the main app's mutating endpoints do — the session cookie is the
+  primary defense, this is a second, independent layer.
 - **Single-run lock and a hard timeout.** Only one login flow can run at a
   time (`POST /api/start` returns 409 while one is in progress). The flow
   runs as a watched subprocess with a hard ceiling
