@@ -99,7 +99,7 @@ docker compose up -d
 
 - **Light/dark** and **language (EN/DE)** toggles in the header, both
   remembered in the browser. Dark mode darkens the OSM tiles via a CSS
-  filter — no API key, building outlines and labels stay intact.
+  filter — no API key needed, and building outlines and labels stay intact.
 - The map fills the screen; devices sit in a **floating panel** (a
   collapsible bottom sheet on mobile), sorted by most recent location.
   Each has its own pin colour and a track of its last 5 positions.
@@ -139,7 +139,8 @@ docker compose up -d
 
 Optional, **off by default**. On the settings page (⚙), tick **Require
 login** and set a username + password (min. 8 characters) — both required
-the first time. The same page later changes them or turns auth off again.
+the first time. Change them, or turn auth off again, later from the same
+page.
 
 Locked out? Set `GFM_AUTH_DISABLE=1` and restart to force it off. With auth
 enabled you can expose the service directly, but **only over HTTPS** (see
@@ -226,7 +227,7 @@ See `.env.example`. Summary:
 - "Semantic locations" (named places without coordinates, e.g. "Home") never
   get a map pin — Google's API sends no coordinates for them, so there is
   nothing to place on the map. The name is shown in the device list instead.
-- On an owner-key version change, `secrets.json` must be regenerated --
+- On an owner-key version change, `secrets.json` must be regenerated —
   either in the existing GoogleFindMyTools container, or by re-running the
   [setup wizard](#getting-started) (it only overwrites the keys it
   re-fetches, so a re-run resumes rather than starting over).
