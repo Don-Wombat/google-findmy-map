@@ -18,6 +18,7 @@ this module) -- same convention as service/locations.py.
 import secrets
 import time
 
+from Auth.token_cache import get_cached_value
 from FMDNCrypto.key_derivation import FMDNOwnerOperations
 from FMDNCrypto.eid_generator import ROTATION_PERIOD, generate_eid
 from KeyBackup.cloud_key_decryptor import encrypt_aes_gcm
@@ -38,15 +39,23 @@ MAX_NAME_LENGTH = 100
 
 def register_tracker(name: str = "") -> str:
     """Register a new generic BLE tracker; return its advertisement key (the
-    EIK, hex-encoded). The key is shown to the operator exactly once -- it
-    must be flashed into the tracker's own firmware -- and is never written
-    to secrets.json or logged by this app.
+    EID -- an ephemeral identifier derived from a fresh, per-tracker identity
+    key, not the identity key itself -- hex-encoded). The key is shown to
+    the operator exactly once -- it must be flashed into the tracker's own
+    firmware -- and is never written to secrets.json or logged by this app.
 
     Requires secrets.json to already have a cached owner_key (i.e. the setup
     wizard or an existing GoogleFindMyTools login has completed at least
-    once) -- this app has no browser, so a missing owner_key surfaces as a
-    plain failure here rather than an interactive login prompt.
+    once) -- this app has no browser, so a missing owner_key raises plainly
+    here instead of falling through to get_owner_key()'s own interactive-
+    login fallback, which would otherwise block on a vendored input() call
+    this process (no TTY, no Chromium) can never satisfy.
     """
+    if not get_cached_value("owner_key"):
+        raise RuntimeError(
+            "no cached owner_key in secrets.json -- run the setup wizard "
+            "(or an existing GoogleFindMyTools login) at least once first"
+        )
     owner_key = get_owner_key()
     display_name = (name or "").strip()[:MAX_NAME_LENGTH] or DEFAULT_DEVICE_NAME
 

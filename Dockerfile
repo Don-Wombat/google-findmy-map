@@ -19,7 +19,11 @@ RUN pip install --no-cache-dir -r requirements.txt \
     # but root, breaking every import for the non-root runtime user
     # (confirmed against the setup-wizard image's identical Dockerfile
     # pattern: surfaces as a confusing ModuleNotFoundError, not an
-    # obvious permissions error).
+    # obvious permissions error). This is one of three umask/permission
+    # fixes this file shares near-verbatim with setup/Dockerfile (this one,
+    # the /app chmod below, and entrypoint.sh's chmod 755) -- duplicated
+    # rather than centralized since there's no shared base image between
+    # the two yet; keep all three in sync in both files if any changes.
     && chmod -R a+rX /usr/local/lib/python3.11/site-packages /usr/local/bin
 
 COPY service/ /app/service

@@ -119,9 +119,10 @@ docker compose up -d
 
 - Step through **Day / Week / Month**, or a free **Range**, per device —
   the full track plus a list of **visited places** (address, duration),
-  each deletable individually. A visit needs enough history clustered in
-  one spot (`GFM_VISIT_RADIUS_M`, `GFM_VISIT_MIN_MINUTES`) to form; it
-  fills in as more data comes in.
+  each deletable individually — this permanently removes the underlying
+  location history for that stay and cannot be undone. A visit needs
+  enough history clustered in one spot (`GFM_VISIT_RADIUS_M`,
+  `GFM_VISIT_MIN_MINUTES`) to form; it fills in as more data comes in.
 - **Export** GPX / GeoJSON / CSV for the track or visited places, scoped
   to the chosen device and date range.
 

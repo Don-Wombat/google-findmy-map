@@ -38,6 +38,11 @@ RUN pip install --no-cache-dir -r requirements.txt \
     # them unreadable to anyone but root, which breaks `import uvicorn`
     # (and everything else pip installed) for the non-root runtime user
     # with a confusing "ModuleNotFoundError", not a permissions error.
+    # This is one of three umask/permission fixes this file shares
+    # near-verbatim with the root Dockerfile (this one, the /app chmod
+    # below, and entrypoint.sh's chmod 755) -- duplicated rather than
+    # centralized since there's no shared base image between the two yet;
+    # keep all three in sync in both files if any changes.
     && chmod -R a+rX /usr/local/lib/python3.11/site-packages /usr/local/bin
 
 COPY app/ /app/setup-app

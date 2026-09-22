@@ -242,6 +242,15 @@ def test_register_device_surfaces_a_failure_without_leaking_the_exception(client
     assert len(detail) < 250
 
 
+def test_register_device_returns_503_when_register_device_failed_to_import(client):
+    """register_device is imported in its own try/except in main.py, set to
+    None on failure, so a broken vendor checkout disables just this feature
+    instead of crashing the whole app at startup -- see main.py."""
+    client._main.register_device = None
+    resp = client.post("/api/devices/register", json={"name": "x"})
+    assert resp.status_code == 503
+
+
 def test_devices_endpoint_lists_a_device_no_longer_in_the_live_poll(client):
     main = client._main
     _seed_one_device(main, name="iPhone", id="dev-1")   # persists last_known_name

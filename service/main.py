@@ -26,7 +26,6 @@ import auth
 import colors
 import export
 import locations
-import register_device
 import visits as visits_mod
 from augment import augment_device, RECENT_TRACK_LENGTH
 from geocode import Geocoder
@@ -36,6 +35,21 @@ _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("findmy-map")
+
+try:
+    # Imported separately from the rest (rather than at the top with
+    # locations/colors/etc.) so that a future GFM_UPSTREAM_REF bump that
+    # renames/removes a symbol register_device.py depends on (see that
+    # file's own module docstring) only disables the optional "Add a
+    # tracker" feature, instead of crashing the whole app -- including
+    # core location tracking -- at startup.
+    import register_device
+except Exception:
+    log.exception(
+        "register_device failed to import -- \"Add a tracker\" will be "
+        "unavailable until this is fixed (see register_device.py)."
+    )
+    register_device = None
 
 POLL_INTERVAL_SECONDS = int(os.environ.get("GFM_POLL_INTERVAL_SECONDS", "120"))
 WEB_DIR = Path(os.environ.get("GFM_WEB_DIR", "/app/web"))
@@ -213,7 +227,7 @@ PASSWORD_MIN_LENGTH = 8
 PUBLIC_PATHS = {
     "/login.html", "/app.css", "/app.js", "/favicon.png",
     "/api/auth/login", "/api/auth/status", "/api/auth/logout",
-    "/api/health", "/api/config",
+    "/api/health",
 }
 
 
@@ -418,10 +432,13 @@ class RegisterDeviceBody(BaseModel):
 @app.post("/api/devices/register", dependencies=[Depends(block_cross_site)])
 def register_device_endpoint(body: RegisterDeviceBody):
     """Register a new generic BLE/FMDN tracker with Google's Find My Device
-    network and return its advertisement key (the EIK) -- shown to the
-    operator exactly once, to be flashed into the tracker's own firmware.
-    Requires secrets.json to already have a cached owner_key; see
+    network and return its advertisement key (the EID, not the underlying
+    identity key -- see register_device.py) -- shown to the operator
+    exactly once, to be flashed into the tracker's own firmware. Requires
+    secrets.json to already have a cached owner_key; see
     register_device.py."""
+    if register_device is None:
+        raise HTTPException(status_code=503, detail="tracker registration is unavailable (see server logs)")
     try:
         key = register_device.register_tracker(body.name)
     except Exception as e:
