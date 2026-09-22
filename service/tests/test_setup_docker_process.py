@@ -1,7 +1,7 @@
-"""Builds the setup-wizard image and runs it to verify the container's own
+"""Runs the setup-wizard image (built once per session by the shared
+``setup_image`` fixture, see ``conftest.py``) to verify the container's own
 process supervision, chown/privilege-drop, and access gate actually work --
-the setup-wizard sibling of test_docker_entrypoint.py. Skips cleanly
-wherever no Docker daemon is reachable, same as the other Docker tests.
+the setup-wizard sibling of test_docker_entrypoint.py.
 
 Does NOT test the actual interactive Google login (impossible to automate,
 see setup/app/run_flow.py and test_setup_wizard_logic.py's module
@@ -21,9 +21,7 @@ via docker-compose.yml's proxy-net (see that file's comments).
 
 import pathlib
 import re
-import shutil
 import subprocess
-import tempfile
 import time
 import uuid
 
@@ -31,46 +29,8 @@ import pytest
 
 pytestmark = pytest.mark.docker
 
-IMAGE_TAG = "findmy-map-setup:pytest-process-check"
-REPO_ROOT = pathlib.Path(__file__).parents[2]
-SETUP_DIR = REPO_ROOT / "setup"
-
-_APT_SANDBOX_WORKAROUND = re.compile(r"\bapt-get (update|install)\b")
 _TOKEN_RE = re.compile(r"token=(\S+)")
 _SET_COOKIE_RE = re.compile(r"set-cookie:\s*wiz_session=([^;\r\n]+)", re.IGNORECASE)
-
-
-def _docker_available():
-    if not shutil.which("docker"):
-        return False
-    try:
-        subprocess.run(
-            ["docker", "info"], capture_output=True, timeout=10, check=True,
-        )
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
-
-
-def _build_patched_image():
-    dockerfile = (SETUP_DIR / "Dockerfile").read_text()
-    patched = _APT_SANDBOX_WORKAROUND.sub(
-        r"apt-get -o APT::Sandbox::User=root \1", dockerfile,
-    )
-    assert patched != dockerfile, "expected at least one apt-get call to patch"
-
-    with tempfile.NamedTemporaryFile("w", suffix=".Dockerfile") as f:
-        f.write(patched)
-        f.flush()
-        result = subprocess.run(
-            ["docker", "build", "-f", f.name, "-t", IMAGE_TAG, str(SETUP_DIR)],
-            capture_output=True, text=True, timeout=900,
-        )
-        assert result.returncode == 0, (
-            "docker build failed:\n"
-            f"--- stdout (tail) ---\n{result.stdout[-4000:]}\n"
-            f"--- stderr (tail) ---\n{result.stderr[-4000:]}"
-        )
 
 
 def _exec_curl(container_id, *args):
@@ -87,10 +47,7 @@ def _status_code(container_id, path):
     return out.strip()
 
 
-@pytest.mark.skipif(not _docker_available(), reason="no Docker daemon reachable")
-def test_setup_wizard_gate_and_processes():
-    _build_patched_image()
-
+def test_setup_wizard_gate_and_processes(setup_image):
     # Pre-create the secrets file on the HOST side of the eventual bind
     # mount, via a throwaway container (not locally -- see module
     # docstring): entrypoint.sh deliberately fails fast rather than trying
@@ -100,7 +57,7 @@ def test_setup_wizard_gate_and_processes():
     host_path = f"/tmp/findmy-map-setup-pytest-{uuid.uuid4().hex[:8]}"
     subprocess.run(
         ["docker", "run", "--rm", "-v", "/tmp:/hosttmp",
-         "--entrypoint", "sh", IMAGE_TAG, "-c",
+         "--entrypoint", "sh", setup_image, "-c",
          f"echo '{{}}' > /hosttmp/{pathlib.Path(host_path).name}"],
         capture_output=True, text=True, timeout=30, check=True,
     )
@@ -113,7 +70,7 @@ def test_setup_wizard_gate_and_processes():
              "-e", "GFM_SETUP_TOKEN_TTL=900",
              "-e", "GFM_SETUP_RUN_TIMEOUT_SECONDS=900",
              "-v", f"{host_path}:/app/vendor/Auth/secrets.json:rw",
-             IMAGE_TAG],
+             setup_image],
             capture_output=True, text=True, timeout=30, check=True,
         )
         container_id = run_result.stdout.strip()
@@ -199,7 +156,6 @@ def test_setup_wizard_gate_and_processes():
             subprocess.run(["docker", "rm", "-f", container_id], capture_output=True)
         subprocess.run(
             ["docker", "run", "--rm", "-v", "/tmp:/hosttmp",
-             "--entrypoint", "rm", IMAGE_TAG, "-f", f"/hosttmp/{pathlib.Path(host_path).name}"],
+             "--entrypoint", "rm", setup_image, "-f", f"/hosttmp/{pathlib.Path(host_path).name}"],
             capture_output=True,
         )
-        subprocess.run(["docker", "rmi", "-f", IMAGE_TAG], capture_output=True)

@@ -1,8 +1,8 @@
-"""Builds the real image and runs it to verify entrypoint.sh's chown +
+"""Runs the real image (built once per session by the shared ``main_image``
+fixture, see ``conftest.py``) to verify entrypoint.sh's chown +
 privilege-drop mechanics: /data gets chowned to the requested PUID:PGID and
 the process actually ends up running as that user -- the thing that used
-to be a separate `findmy-map-init` service. Skips cleanly wherever no
-Docker daemon is reachable, same as test_docker_build.py.
+to be a separate `findmy-map-init` service.
 
 Uses a bind mount to a host path that does NOT exist yet (Docker auto-
 creates it as root when the container starts), matching the real
@@ -34,64 +34,15 @@ docker-compose.yml deployment exactly -- not a named volume. Two reasons:
 """
 
 import pathlib
-import re
-import shutil
 import subprocess
-import tempfile
 import uuid
 
 import pytest
 
 pytestmark = pytest.mark.docker
 
-IMAGE_TAG = "findmy-map:pytest-entrypoint-check"
-REPO_ROOT = pathlib.Path(__file__).parents[2]
 
-# Same nested-DinD apt-sandbox quirk as test_docker_build.py (see that file
-# for the full explanation) -- it blocks fetching gosu too, not just git/
-# ca-certificates, so the same verification-only patch is needed here.
-# Duplicated rather than imported: it's a ~10-line helper and this repo has
-# no conftest.py to share fixtures through, so importing across test files
-# would be a new coupling for very little.
-_APT_SANDBOX_WORKAROUND = re.compile(r"\bapt-get (update|install)\b")
-
-
-def _docker_available():
-    if not shutil.which("docker"):
-        return False
-    try:
-        subprocess.run(
-            ["docker", "info"], capture_output=True, timeout=10, check=True,
-        )
-        return True
-    except (OSError, subprocess.SubprocessError):
-        return False
-
-
-def _build_patched_image():
-    dockerfile = (REPO_ROOT / "Dockerfile").read_text()
-    patched = _APT_SANDBOX_WORKAROUND.sub(
-        r"apt-get -o APT::Sandbox::User=root \1", dockerfile,
-    )
-    assert patched != dockerfile, "expected at least one apt-get call to patch"
-
-    with tempfile.NamedTemporaryFile("w", suffix=".Dockerfile") as f:
-        f.write(patched)
-        f.flush()
-        result = subprocess.run(
-            ["docker", "build", "-f", f.name, "-t", IMAGE_TAG, str(REPO_ROOT)],
-            capture_output=True, text=True, timeout=600,
-        )
-        assert result.returncode == 0, (
-            "docker build failed:\n"
-            f"--- stdout (tail) ---\n{result.stdout[-4000:]}\n"
-            f"--- stderr (tail) ---\n{result.stderr[-4000:]}"
-        )
-
-
-@pytest.mark.skipif(not _docker_available(), reason="no Docker daemon reachable")
-def test_entrypoint_chowns_data_and_drops_privileges():
-    _build_patched_image()
+def test_entrypoint_chowns_data_and_drops_privileges(main_image):
     # A path the daemon has never seen before -- Docker auto-creates it as
     # root on first use, exactly like a brand new GFM_DATA_DIR on a real
     # deployment host. Lives under /tmp on whatever machine DOCKER_HOST
@@ -105,7 +56,7 @@ def test_entrypoint_chowns_data_and_drops_privileges():
             ["docker", "run", "--rm",
              "-e", "PUID=1234", "-e", "PGID=1234",
              "-v", f"{host_path}:/data",
-             IMAGE_TAG, "id", "-u"],
+             main_image, "id", "-u"],
             capture_output=True, text=True, timeout=60, check=True,
         )
         assert result.stdout.strip() == "1234"
@@ -114,7 +65,7 @@ def test_entrypoint_chowns_data_and_drops_privileges():
         # the same host path -- not a local stat(), see module docstring.
         stat_result = subprocess.run(
             ["docker", "run", "--rm", "-v", f"{host_path}:/data",
-             "--entrypoint", "stat", IMAGE_TAG, "-c", "%u:%g", "/data"],
+             "--entrypoint", "stat", main_image, "-c", "%u:%g", "/data"],
             capture_output=True, text=True, timeout=30, check=True,
         )
         assert stat_result.stdout.strip() == "1234:1234"
@@ -123,7 +74,6 @@ def test_entrypoint_chowns_data_and_drops_privileges():
         # remove it via a throwaway container, not shutil.rmtree.
         subprocess.run(
             ["docker", "run", "--rm", "-v", "/tmp:/hosttmp",
-             "--entrypoint", "rm", IMAGE_TAG, "-rf", f"/hosttmp/{pathlib.Path(host_path).name}"],
+             "--entrypoint", "rm", main_image, "-rf", f"/hosttmp/{pathlib.Path(host_path).name}"],
             capture_output=True,
         )
-        subprocess.run(["docker", "rmi", "-f", IMAGE_TAG], capture_output=True)
