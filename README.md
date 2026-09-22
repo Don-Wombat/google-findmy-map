@@ -18,20 +18,11 @@ instance required.
 
 ## Screenshots
 
-<img src="docs/img/map-dark.jpg" alt="Map view with devices grouped into collapsible sections" width="100%">
+<img src="docs/img/map.jpg" alt="Map view with devices grouped into collapsible sections" width="100%">
 
-<table>
-<tr>
-<td width="50%"><img src="docs/img/timeline.jpg" alt="Timeline: day/week/month step-through, track, visited places and GPX/GeoJSON/CSV export" width="100%"></td>
-<td width="50%"><img src="docs/img/edit-device.jpg" alt="Editing a device's name, pin colour and group" width="100%"></td>
-</tr>
-<tr>
-<td><img src="docs/img/map-light.jpg" alt="Map view, light theme, with one device group collapsed" width="100%"></td>
-<td align="center"><img src="docs/img/map-mobile.jpg" alt="Mobile layout with the grouped device list as a bottom sheet" height="420"></td>
-</tr>
-</table>
+<img src="docs/img/timeline.jpg" alt="Timeline: track, visited places and GPX/GeoJSON/CSV export" width="100%">
 
-![Clicking through the map, groups, the polling-failure banner and the timeline](docs/img/demo.gif)
+<img src="docs/img/setup-wizard.jpg" alt="Setup wizard: generate secrets.json via an embedded browser login or by uploading an existing file" width="100%">
 
 <sub>All screenshots use synthetic demo data (fictional devices moving around Berlin), not real location history.</sub>
 
