@@ -70,6 +70,22 @@
     </section>
 
     <section class="settings-section">
+      <h2 data-i18n="s_register_device">Add a tracker</h2>
+      <div class="muted" data-i18n="register_device_hint">Register a new generic BLE/FMDN tracker (e.g. this project's own ESP32 firmware) with your Google account. Requires the setup wizard (or an existing GoogleFindMyTools login) to have run at least once.</div>
+      <div class="field">
+        <label for="register-device-name" data-i18n="f_device_name">Name</label>
+        <input type="text" id="register-device-name" maxlength="100">
+      </div>
+      <button type="button" id="register-device-btn" class="btn btn-primary" data-i18n="register_device_button">Register</button>
+      <div id="register-device-msg" hidden></div>
+      <div id="register-device-key" hidden>
+        <div class="muted" data-i18n="register_device_key_hint">Advertisement key -- copy it now, it will not be shown again. Flash it into the tracker's own firmware.</div>
+        <code id="register-device-key-value" class="stale-id"></code>
+        <button type="button" id="register-device-copy" class="btn btn-small" data-i18n="copy">Copy</button>
+      </div>
+    </section>
+
+    <section class="settings-section">
       <h2 data-i18n="s_export">Data export</h2>
       <div class="field">
         <label for="export-device" data-i18n="f_device">Device</label>
@@ -207,6 +223,61 @@
   logoutBtn.addEventListener('click', async () => {
     try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
     location.replace('/login.html');
+  });
+
+  // ---- register a new tracker --------------------------------------------
+  const regNameInput = document.getElementById('register-device-name');
+  const regBtn = document.getElementById('register-device-btn');
+  const regMsg = document.getElementById('register-device-msg');
+  const regKeyBox = document.getElementById('register-device-key');
+  const regKeyValue = document.getElementById('register-device-key-value');
+  const regCopyBtn = document.getElementById('register-device-copy');
+
+  function setRegMsg(text, isError) {
+    regMsg.textContent = text || '';
+    regMsg.className = isError ? 'error-row' : 'muted';
+    regMsg.hidden = !text;
+  }
+
+  regBtn.addEventListener('click', async () => {
+    setRegMsg('');
+    regKeyBox.hidden = true;
+    regBtn.disabled = true;
+    try {
+      const res = await fetch('/api/devices/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: regNameInput.value.trim() }),
+      });
+      if (!res.ok) {
+        let detail = '';
+        try { detail = (await res.json()).detail || ''; } catch (e) {}
+        setRegMsg(typeof detail === 'string' && detail ? detail : t('login_error'), true);
+        return;
+      }
+      const data = await res.json();
+      regNameInput.value = '';
+      setRegMsg(t('register_device_done'), false);
+      if (data.advertisement_key) {
+        regKeyValue.textContent = data.advertisement_key;
+        regKeyBox.hidden = false;
+      }
+      loadDevices();
+    } catch (e) {
+      setRegMsg(t('login_error'), true);
+    } finally {
+      regBtn.disabled = false;
+    }
+  });
+
+  regCopyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(regKeyValue.textContent);
+      setRegMsg(t('copied'), false);
+    } catch (e) {
+      // Clipboard API unavailable (e.g. insecure context) -- the key is
+      // still selectable text in the <code> element, just not auto-copied.
+    }
   });
 
   // ---- data export -------------------------------------------------------

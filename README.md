@@ -127,6 +127,12 @@ docker compose up -d
 
 ### Settings
 
+- **Add a tracker** registers a new generic BLE/FMDN tracker (e.g. this
+  project's own ESP32 firmware) with your Google account and shows the
+  resulting advertisement key once, to flash into the tracker's own
+  firmware. Needs `secrets.json` to already have a cached `owner_key` — run
+  the setup wizard (or an existing GoogleFindMyTools login) at least once
+  first.
 - **Old devices** that dropped out of the poll can be deleted — id-keyed,
   not name-keyed (renamed duplicates stay distinguishable), and a still-live
   device can't be deleted.
@@ -181,10 +187,13 @@ enabled you can expose the service directly, but **only over HTTPS** (see
   (track/name/colour/group per device), `service/visits.py` (clusters
   points into stays), `service/geocode.py` (reverse geocoding via
   Nominatim, ≤ 1 request/1.1 s, negative cache + backoff),
-  `service/auth.py` (the optional built-in login).
+  `service/auth.py` (the optional built-in login),
+  `service/register_device.py` (registers a new tracker with Google;
+  re-implements the vendored `register_esp32()` with a custom device name,
+  since that function hardcodes one).
 - `web/index.html` (map), `web/timeline.html`, `web/settings.html`
   (theme / language / login / data export / device-history reset /
-  old-device deletion),
+  old-device deletion / tracker registration),
   `web/login.html`, `web/app.css`, `web/app.js`.
 - `setup/` — the opt-in setup wizard, a separate image/container (own
   `Dockerfile`, not built or started by default). A virtual X display
@@ -234,6 +243,9 @@ See `.env.example`. Summary:
 - `secrets.json` is written non-atomically by both containers; a conflict on an
   exactly simultaneous token refresh is theoretically possible, in practice
   unlikely.
+- The "Add a tracker" advertisement key is shown exactly once and never
+  stored by this app, same as the upstream CLI — copy it before leaving the
+  page, or register a new one if it's lost.
 
 ## License
 

@@ -26,6 +26,7 @@ import auth
 import colors
 import export
 import locations
+import register_device
 import visits as visits_mod
 from augment import augment_device, RECENT_TRACK_LENGTH
 from geocode import Geocoder
@@ -408,6 +409,25 @@ class AuthSettingsBody(BaseModel):
     username: str | None = None
     new_password: str | None = None
     current_password: str | None = None
+
+
+class RegisterDeviceBody(BaseModel):
+    name: str = ""
+
+
+@app.post("/api/devices/register", dependencies=[Depends(block_cross_site)])
+def register_device_endpoint(body: RegisterDeviceBody):
+    """Register a new generic BLE/FMDN tracker with Google's Find My Device
+    network and return its advertisement key (the EIK) -- shown to the
+    operator exactly once, to be flashed into the tracker's own firmware.
+    Requires secrets.json to already have a cached owner_key; see
+    register_device.py."""
+    try:
+        key = register_device.register_tracker(body.name)
+    except Exception as e:
+        log.exception("Device registration failed")
+        raise HTTPException(status_code=502, detail=f"{type(e).__name__}: {str(e)[:200]}")
+    return {"advertisement_key": key}
 
 
 @app.put("/api/devices/{device_id}", dependencies=[Depends(block_cross_site)])

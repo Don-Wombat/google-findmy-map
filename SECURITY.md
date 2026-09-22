@@ -54,7 +54,8 @@ These do **not** replace the reverse-proxy authentication above.
 - **Cross-site request blocking.** `POST /api/refresh`,
   `PUT /api/devices/{id}`, `DELETE /api/devices/{id}`, `DELETE /api/history`,
   `DELETE /api/devices/{id}/history`, `POST /api/devices/{id}/ring[/stop]`,
-  `POST /api/auth/login` and `PUT /api/settings/auth` reject requests whose
+  `POST /api/devices/register`, `POST /api/auth/login` and
+  `PUT /api/settings/auth` reject requests whose
   `Sec-Fetch-Site` header is
   `cross-site`/`same-site` (Fetch Metadata). This stops a random web page
   the operator visits from triggering polls, edits, deletes, or ringing a
@@ -94,6 +95,18 @@ These do **not** replace the reverse-proxy authentication above.
   negatively caches failed lookups, and backs off exponentially on
   repeated failures — so an outage can't turn into a request flood that
   gets your IP blocked by the public OSM Nominatim.
+- **Tracker registration introduces no new attack surface class.**
+  `POST /api/devices/register` (Settings → "Add a tracker") is a plain,
+  synchronous, authenticated HTTPS call to Google's API — unlike the setup
+  wizard, no browser, Selenium or noVNC is involved, and it runs in the
+  already-running main app process behind the same gates as every other
+  mutating endpoint. It requires `secrets.json` to already have a cached
+  `owner_key`; since this app has no browser, a missing one fails cleanly
+  instead of attempting an interactive login. The returned advertisement key
+  (the tracker's own encryption identity key) is shown to the operator
+  exactly once and is never written to `secrets.json`, a log, or any other
+  file by this app — treat it like any other secret while copying it into
+  the tracker's firmware.
 - **Non-root container.** The app process runs as an unprivileged UID
   (`${PUID}:${PGID}`), never as root. The container itself starts as root
   very briefly: `entrypoint.sh` (baked into the image) chowns the `/data`

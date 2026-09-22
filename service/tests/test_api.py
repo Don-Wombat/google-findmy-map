@@ -17,6 +17,9 @@ def _build_client(tmp_path, monkeypatch, env=None):
     stub.start_sound = lambda device_id: True
     stub.stop_sound = lambda device_id: True
     monkeypatch.setitem(sys.modules, "locations", stub)
+    register_stub = types.ModuleType("register_device")
+    register_stub.register_tracker = lambda name: "aabbccddeeff00112233445566778899"
+    monkeypatch.setitem(sys.modules, "register_device", register_stub)
     monkeypatch.setenv("GFM_HISTORY_DB", str(tmp_path / "history.db"))
     monkeypatch.setenv("GFM_HISTORY_FILE", str(tmp_path / "history.json"))
     monkeypatch.setenv("GFM_WEB_DIR", str(tmp_path))
@@ -166,6 +169,8 @@ def test_mutating_endpoints_reject_cross_site_requests(client):
                        headers={"sec-fetch-site": "cross-site"}).status_code == 403
     assert client.post("/api/devices/d/ring/stop",
                        headers={"sec-fetch-site": "cross-site"}).status_code == 403
+    assert client.post("/api/devices/register", json={"name": "x"},
+                       headers={"sec-fetch-site": "cross-site"}).status_code == 403
 
 
 def test_mutating_endpoints_allow_same_origin_and_non_browser(client):
@@ -188,6 +193,53 @@ def test_stop_ring_surfaces_a_failure(client):
     client._main.locations.stop_sound = lambda device_id: False
     resp = client.post("/api/devices/dev-1/ring/stop")
     assert resp.status_code == 502
+
+
+def test_register_device_returns_the_advertisement_key(client):
+    client._main.register_device.register_tracker = lambda name: "aabbcc"
+    resp = client.post("/api/devices/register", json={"name": "My Tracker"})
+    assert resp.status_code == 200
+    assert resp.json() == {"advertisement_key": "aabbcc"}
+
+
+def test_register_device_passes_the_raw_name_through(client):
+    """Trimming/truncation/defaulting is register_device.register_tracker()'s
+    own job (see its docstring) -- the endpoint must not second-guess it by
+    pre-processing the name itself."""
+    received = {}
+
+    def fake_register(name):
+        received["name"] = name
+        return "aabbcc"
+
+    client._main.register_device.register_tracker = fake_register
+    client.post("/api/devices/register", json={"name": "  My Tracker  "})
+    assert received["name"] == "  My Tracker  "
+
+
+def test_register_device_defaults_to_an_empty_name(client):
+    received = {}
+
+    def fake_register(name):
+        received["name"] = name
+        return "aabbcc"
+
+    client._main.register_device.register_tracker = fake_register
+    resp = client.post("/api/devices/register", json={})
+    assert resp.status_code == 200
+    assert received["name"] == ""
+
+
+def test_register_device_surfaces_a_failure_without_leaking_the_exception(client):
+    def boom(name):
+        raise RuntimeError("some possibly-sensitive detail: " + "x" * 500)
+
+    client._main.register_device.register_tracker = boom
+    resp = client.post("/api/devices/register", json={"name": "x"})
+    assert resp.status_code == 502
+    detail = resp.json()["detail"]
+    assert detail.startswith("RuntimeError:")
+    assert len(detail) < 250
 
 
 def test_devices_endpoint_lists_a_device_no_longer_in_the_live_poll(client):
