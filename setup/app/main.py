@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -59,9 +59,31 @@ def _cookie_ok(request: Request) -> bool:
     return auth.parse_session_token(token, SETUP_TOKEN)
 
 
-def _set_session_cookie(response) -> None:
+def _request_is_https(request: Request) -> bool:
+    """Same duplicate-not-import convention as the rest of this file (see
+    auth.py's docstring) -- mirrors service/main.py's identical helper."""
+    xfp = request.headers.get("x-forwarded-proto")
+    scheme = xfp.split(",")[0].strip() if xfp else request.url.scheme
+    return scheme == "https"
+
+
+def _set_session_cookie(request: Request, response) -> None:
     token = auth.make_session_token(SETUP_TOKEN)
-    response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", path="/")
+    response.set_cookie(
+        SESSION_COOKIE, token, httponly=True, samesite="lax",
+        secure=_request_is_https(request), path="/",
+    )
+
+
+def _block_cross_site(request: Request):
+    """Same Fetch-Metadata defense-in-depth service/main.py's block_cross_site
+    applies to every mutating endpoint there -- the SameSite=Lax session
+    cookie is the primary defense, this is a second, independent layer in
+    case a browser ever treats some cross-site request shape as same-site
+    for cookie purposes."""
+    site = request.headers.get("sec-fetch-site")
+    if site is not None and site not in ("same-origin", "none"):
+        raise HTTPException(status_code=403, detail="cross-site request rejected")
 
 
 @app.middleware("http")
@@ -72,7 +94,7 @@ async def _gate(request: Request, call_next):
     candidate = request.query_params.get("token")
     if candidate and _token_redeemable() and auth.token_matches(candidate, SETUP_TOKEN):
         redirect = RedirectResponse(request.url.path, status_code=302)
-        _set_session_cookie(redirect)
+        _set_session_cookie(request, redirect)
         return redirect
 
     if _cookie_ok(request):
@@ -141,6 +163,21 @@ async def _run_flow_and_watch() -> None:
     reader_task = asyncio.create_task(_read_output())
     try:
         await asyncio.wait_for(proc.wait(), timeout=RUN_TIMEOUT)
+        # proc.wait() resolving doesn't guarantee _read_output()'s
+        # async-for loop has already consumed the final buffered
+        # {"stage": "done"/"failed", ...} line from the now-closing pipe --
+        # cancelling it immediately (see finally below) raced that drain
+        # and could discard a just-written success/failure event, falling
+        # through to the "exited unexpectedly" fallback further down even
+        # though the run (and its state.finish() call) already completed
+        # correctly. Give the reader a short grace period to hit EOF and
+        # finish on its own first; the finally's cancel() below is then a
+        # harmless no-op on an already-completed task, same as it always
+        # was for a run that never raced this in the first place.
+        try:
+            await asyncio.wait_for(reader_task, timeout=5)
+        except asyncio.TimeoutError:
+            pass
     except asyncio.TimeoutError:
         proc.terminate()
         try:
@@ -170,7 +207,7 @@ async def _run_flow_and_watch() -> None:
         state.finish("failed", error="wizard process exited unexpectedly")
 
 
-@app.post("/api/start")
+@app.post("/api/start", dependencies=[Depends(_block_cross_site)])
 async def start_run():
     if not state.try_start():
         return JSONResponse({"detail": "a run is already in progress"}, status_code=409)
@@ -178,7 +215,7 @@ async def start_run():
     return {"ok": True}
 
 
-@app.post("/api/upload")
+@app.post("/api/upload", dependencies=[Depends(_block_cross_site)])
 async def upload_secrets(file: UploadFile = File(...)):
     """Bring in an existing secrets.json instead of logging in through the
     embedded browser -- e.g. one already produced by a GoogleFindMyTools
