@@ -1,5 +1,5 @@
 # findmy-map
-
+[![CI](https://github.com/Don-Wombat/google-findmy-map/actions/workflows/ci.yml/badge.svg)](https://github.com/Don-Wombat/google-findmy-map/actions/workflows/ci.yml)
 Shows the locations of the devices registered with Google "Find My Device"
 (phone, ESP32 tracker, …) on a real map (Leaflet + OpenStreetMap) instead of
 just a Google Maps link in the terminal. On top of that: a history track for a
