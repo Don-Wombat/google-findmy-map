@@ -14,6 +14,7 @@ import threading
 import time
 
 from Auth.fcm_receiver import FcmReceiver
+from Auth.firebase_messaging.fcmpushclient import FcmPushClientRunState
 from NovaApi.ExecuteAction.LocateTracker.decrypt_locations import (
     is_mcu_tracker,
     retrieve_identity_key,
@@ -50,8 +51,32 @@ def list_devices():
     return get_canonic_ids(device_list)
 
 
+def _revive_fcm_listener(receiver) -> bool:
+    """Make FcmReceiver start a fresh push listener if the old one died.
+
+    Upstream's FcmPushClient permanently shuts itself down after a few
+    sequential connection/login errors (e.g. a short network outage) but
+    FcmReceiver keeps `_listening = True`, so it never reconnects: location
+    requests still reach Google, the answers are never received, and every
+    device reports "no_response" until the process is restarted.
+    """
+    pc = receiver.pc
+    if not receiver._listening:
+        return False
+    if pc.run_state not in (FcmPushClientRunState.STOPPING, FcmPushClientRunState.STOPPED):
+        return False
+    log.warning("FCM push listener had shut itself down; starting a new one")
+    pc.sequential_error_counters.clear()
+    old_loop = receiver._loop
+    receiver._listening = False  # next register_for_location_updates() re-registers + restarts
+    if old_loop is not None:
+        old_loop.call_soon_threadsafe(old_loop.stop)
+    return True
+
+
 def _fetch_device_update(canonic_device_id: str, timeout: float = LOCATION_FETCH_TIMEOUT):
     receiver = FcmReceiver()
+    _revive_fcm_listener(receiver)
     request_uuid = generate_random_uuid()
     done = threading.Event()
     holder = {}
@@ -205,6 +230,7 @@ def _send_sound_request(canonic_device_id: str, should_start: bool) -> bool:
     in a background thread instead of blocking the response.
     """
     receiver = FcmReceiver()
+    _revive_fcm_listener(receiver)
 
     def handle(_response_hex):
         pass  # no response payload to act on
